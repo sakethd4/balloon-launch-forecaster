@@ -156,4 +156,5 @@ Add train, evaluate, inference, and run-dashboard commands here once they exist.
 ## Data notes
 
 - IGRA soundings (verified): files are `USM000722xx-data-beg2026.txt.zip` (year to date, small) and `USM000722xx-data.txt.zip` (full history, large; ask before downloading). Stations: FWD `USM00072249`, CRP `USM00072251`, DRT `USM00072261`, MAF `USM00072265`. Austin has no sounding station; the nearest are 280+ km away, so sounding winds are a proxy for Austin's winds, not exact.
+- **Downloaded and verified:** full history for all four stations in `~/balloon-data/raw/igra/` (~370 MB zipped, CRC OK, sounding counts match NOAA's station list; FWD from 1937, CRP 1953, DRT 1954, MAF 1930, all through Oct 2026). Re-fetch with `python -m scripts.download_igra`. They are large once unzipped, so `igra.parse` on a full file is slow and memory-heavy: restrict to recent years and save as Parquet before modeling.
 - IGRA missing values are -9999 and -8888 (QC-removed). Wind speed is in tenths of m/s, temperature in tenths of °C, pressure in Pa.

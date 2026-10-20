@@ -13,4 +13,6 @@ dependencies:
   - pyyaml
   - matplotlib
   - pytest
+  - cfgrib
+  - eccodes
 # Added later when needed: pytorch, lightgbm, streamlit, plotly, pydeck, dask, s3fs, cdsapi

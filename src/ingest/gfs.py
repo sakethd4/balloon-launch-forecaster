@@ -78,20 +78,35 @@ def select_ranges(idx_text: str) -> list[tuple[int, int | None]]:
     return ranges
 
 
-def _get_range(session: requests.Session, url: str, start: int, end: int | None,
-               retries: int = 4) -> bytes:
-    """Fetch one byte range, retrying on network errors (public buckets do hiccup)."""
-    rng = f"bytes={start}-{end - 1}" if end is not None else f"bytes={start}-"
+def _retry(fn, retries: int = 5):
+    """Call fn(), retrying with growing pauses on network errors (networks and public
+    buckets do hiccup, e.g. a momentary DNS failure)."""
     for attempt in range(retries):
         try:
-            r = session.get(url, headers={"Range": rng}, timeout=120)
-            if r.status_code != 206:
-                raise RuntimeError(f"expected partial content (206), got {r.status_code} for {url}")
-            return r.content
+            return fn()
         except (requests.RequestException, RuntimeError):
             if attempt == retries - 1:
                 raise
             time.sleep(2 ** attempt)
+
+
+def _get_text(session: requests.Session, url: str) -> str:
+    r = session.get(url, timeout=60)
+    r.raise_for_status()
+    return r.text
+
+
+def _get_range(session: requests.Session, url: str, start: int, end: int | None) -> bytes:
+    """Fetch one byte range of a file."""
+    rng = f"bytes={start}-{end - 1}" if end is not None else f"bytes={start}-"
+
+    def fetch():
+        r = session.get(url, headers={"Range": rng}, timeout=120)
+        if r.status_code != 206:
+            raise RuntimeError(f"expected partial content (206), got {r.status_code} for {url}")
+        return r.content
+
+    return _retry(fetch)
 
 
 def download_step(url: str, dest: Path, session: requests.Session, range_workers: int = 8) -> None:
@@ -100,9 +115,8 @@ def download_step(url: str, dest: Path, session: requests.Session, range_workers
     Ranges are fetched in parallel. A single connection to AWS can be slow while many
     connections together are fast, so parallelism is what makes this practical.
     """
-    idx = session.get(url + ".idx", timeout=60)
-    idx.raise_for_status()
-    ranges = select_ranges(idx.text)
+    idx_text = _retry(lambda: _get_text(session, url + ".idx"))
+    ranges = select_ranges(idx_text)
     with ThreadPoolExecutor(range_workers) as ex:
         chunks = list(ex.map(lambda r: _get_range(session, url, *r), ranges))  # order preserved
     with open(dest, "wb") as f:

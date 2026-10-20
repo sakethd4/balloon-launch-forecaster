@@ -14,7 +14,7 @@ from datetime import date, timedelta
 
 from src.ingest import gfs
 
-MAX_CONSECUTIVE_FAILURES = 3
+MAX_CONSECUTIVE_FAILURES = 5
 
 p = argparse.ArgumentParser()
 p.add_argument("--start", type=date.fromisoformat, required=True)
@@ -45,6 +45,10 @@ for i, day in enumerate(days, 1):
     if streak >= MAX_CONSECUTIVE_FAILURES:
         print(f"Stopping: {streak} failures in a row.", flush=True)
         break
+    if streak:
+        # Likely a network outage: wait longer after each failure so a short outage
+        # (a minute or two) does not burn through our failure budget.
+        time.sleep(60 * streak)
 
 print(f"\nDone in {(time.time() - t_start) / 60:.1f} min. Failed days: {len(failed)}", flush=True)
 for day, err in failed:

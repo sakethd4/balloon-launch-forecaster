@@ -113,7 +113,7 @@ Colab gives us GPUs without owning hardware, but with constraints the pipeline h
 - **Storage lives outside the runtime.** All datasets, checkpoints, and results go to Google Drive (or a cloud bucket). Data is read in chunks from Zarr, not loaded whole into memory.
 - **Code lives in Git, not in notebooks.** Notebooks are thin launchers: they clone the repo, mount storage, and run `python -m src.train --config configs/<experiment>.yaml`. This keeps the work reviewable and lets us run the same code locally for small tests.
 - **Jobs are shardable and idempotent.** Ingestion and preprocessing split work into independent shards (for example one month each), skip finished ones, and can be restarted at any point.
-- **Budget: 100 compute units, so GPU time is rationed.** Colab Pro units drain much faster on a GPU than on a CPU runtime (a T4 uses roughly 1.5–2 units per hour; check the Colab resources page for current rates). That is about 50 GPU hours in total, shared by the whole club. Rules:
+- **Budget: 300 compute units, so GPU time is limited.** Colab Pro units drain much faster on a GPU than on a CPU runtime. Measured: an 8 hour CPU run used about 1 unit. A T4 is roughly 1.5–2 units per hour (from memory; check the Colab resources page and measure on the first GPU run), which would be about 150 GPU hours in total, shared by the whole club. Rules:
   - Do all data downloading, preprocessing, baselines, and LightGBM on a **CPU runtime** or on the **local laptop** (Windows 11, NVIDIA RTX 3050 6 GB, ~595 GB free disk). The local GPU is also good for debugging and small models, since it costs no units. Its 6 GB of memory limits batch and model size, so use Colab's T4 for the full-size deep-model runs.
   - Debug on a tiny subset (one month, one site) before any long GPU run. Test the code path on CPU first.
   - Set a unit budget per phase and track spending in the experiment log. Disconnect the runtime as soon as a job finishes; an idle GPU still burns units.
@@ -169,7 +169,7 @@ Implementation: Streamlit with Plotly (charts) and a map library (pydeck or foli
 - **Forecast skill drops with lead time.** Beyond ~5 days, expect scores to be low-confidence. The tool should say so.
 - **Launch sites.** Austin area, specific candidate sites not yet chosen. They define the map domain and recovery terrain. Landing predictions toward the east and southeast can end up over the Gulf or Houston area, so a wide map matters.
 - **Balloon details.** Fill volume is unknown.
-- **Compute budget.** Only 100 Colab compute units are available, so GPU time is a scarce resource (see the compute section).
+- **Compute budget.** 300 Colab compute units are available, so GPU time is limited (see the compute section).
 - **Scope creep.** Get the baseline and evaluation harness working end to end before adding model complexity.
 
 ## Team and roles (to fill in)

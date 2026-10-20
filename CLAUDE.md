@@ -14,7 +14,7 @@ Early build. Done so far: conda env `balloon` (Python 3.11, light packages only;
 - **Balloon:** 50 g latex (typically tops out ~50,000 ft), helium, payload ~80 g. Target ceiling ~45,000 ft (~13.7 km). Target ascent **350 m/min (~5.8 m/s)**, about 40 min to the ceiling. Parachute descent ~**15 m/s average** (~15 min from the ceiling), no rigging weight beyond the 80 g payload. Total flight under an hour. Fill volume is an unknown placeholder.
 - **Vertical domain:** surface to ~100 hPa. The balloon stays below the stratospheric turnaround layer, so jet-stream and upper-tropospheric winds (200–500 hPa) matter most. Most drift happens during the ~40 min ascent.
 - **Regulations/airspace:** the club handles these itself. Don't build regulatory layers or logic. Keep a one-line advisory disclaimer in the UI only. Physical hazards (water, cities) are still worth mapping.
-- **Colab:** verified working through the VS Code Colab extension (Python 3.13, Tesla T4, ~208 GB local disk). Colab Pro with only **100 compute units**, so GPU time is rationed (see Compute).
+- **Colab:** verified working through the VS Code Colab extension (Python 3.13, Tesla T4, ~208 GB local disk). Colab Pro with **300 compute units** (corrected from 100 on 2026-10-20), so GPU time is limited but not scarce (see Compute). Measured: the 8 h CPU download run cost only ~1 unit.
 - **Local machine:** Windows 11, Anaconda Python 3.13.5, NVIDIA RTX 3050 6 GB laptop GPU, ~595 GB free disk. Use it for development, data work, baselines, and small-model debugging (costs no Colab units). 6 GB VRAM limits model size, so full-size training goes to Colab's T4.
 - **Shared Drive folder:** verified. `balloon-forecaster` appears in the Colab account's My Drive, so `DATA_ROOT` is `/content/drive/MyDrive/balloon-forecaster`.
 - **Storage:** ~1 TB Google Drive, owned by a *different* Google account than the Colab account (see below).
@@ -53,7 +53,7 @@ Training runs on Colab. Design everything around its constraints:
 - **Code lives in Git; notebooks are thin launchers** that clone the repo, mount storage, and call `python -m src.train --config configs/<name>.yaml`. No pipeline logic in notebooks.
 - Ingestion and preprocessing are sharded (e.g. one month per shard), idempotent, and restartable.
 - Debug on a tiny subset locally first. Use mixed precision and gradient accumulation to use GPU time well.
-- **Compute budget: 100 units (~50 T4 hours at roughly 1.5–2 units/hr; check current rates).** Do downloading, preprocessing, baselines, LightGBM, and small-model debugging locally (the laptop's RTX 3050 is free to use) or on CPU runtimes; use the Colab GPU only for full-size deep-model training. Never start a long GPU run without a short test run first and the user's go-ahead. Remind the user to disconnect idle runtimes. Log units spent per experiment.
+- **Compute budget: 300 units (~150 T4 hours if a T4 uses roughly 1.5–2 units/hr, which is from memory and not yet measured; CPU is nearly free: ~1 unit per 8 h, measured).** Do downloading, preprocessing, baselines, LightGBM, and small-model debugging locally (the laptop's RTX 3050 is free to use) or on CPU runtimes; use the Colab GPU only for full-size deep-model training. Never start a long GPU run without a short test run first and the user's go-ahead. Remind the user to disconnect idle runtimes. Log units spent per experiment.
 
 ### Storage across two Google accounts
 

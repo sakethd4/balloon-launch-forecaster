@@ -28,6 +28,14 @@ STATIONS = {
     "MAF": "USM00072265",  # Midland
 }
 
+# Station coordinates (degrees) and elevation (m above sea level) from IGRA's station list.
+STATION_INFO = {
+    "FWD": {"id": "USM00072249", "lat": 32.8350, "lon": -97.2986, "elev_m": 195.2},
+    "CRP": {"id": "USM00072251", "lat": 27.7789, "lon": -97.5055, "elev_m": 14.8},
+    "DRT": {"id": "USM00072261", "lat": 29.3744, "lon": -100.9183, "elev_m": 314.0},
+    "MAF": {"id": "USM00072265", "lat": 31.9425, "lon": -102.1891, "elev_m": 874.9},
+}
+
 MISSING = (-9999, -8888)  # -9999 = missing, -8888 = removed by quality control
 
 
@@ -60,17 +68,24 @@ def _num(s: str, scale: float = 1.0) -> float:
     return np.nan if v in MISSING else v * scale
 
 
-def parse(zip_path: Path) -> pd.DataFrame:
+def parse(zip_path: Path, start=None, end=None) -> pd.DataFrame:
     """Parse an IGRA zip into one row per sounding level.
+
+    `start` / `end` (UTC timestamps or date strings, inclusive) keep only soundings in that
+    range. Soundings outside it are skipped without being parsed, which is much faster
+    than loading 90 years of history.
 
     Units out: pressure_hpa, gph_m (geopotential height above sea level),
     temp_c, rh_pct, wdir_deg (direction wind comes FROM), wspd_ms, and the wind
     as u_ms (toward east) / v_ms (toward north), which is what the math needs.
     """
+    start = pd.Timestamp(start, tz="UTC") if start is not None else None
+    end = pd.Timestamp(end, tz="UTC") if end is not None else None
     rows = []
     with zipfile.ZipFile(zip_path) as zf:
         text = io.TextIOWrapper(zf.open(zf.namelist()[0]), encoding="ascii")
         station = launch = None
+        skipping = False
         for line in text:
             if line.startswith("#"):
                 station = line[1:12]
@@ -82,7 +97,10 @@ def parse(zip_path: Path) -> pd.DataFrame:
                     year=int(line[13:17]), month=int(line[18:20]),
                     day=int(line[21:23]), hour=min(hour, 23), tz="UTC",
                 )
+                skipping = (start is not None and launch < start) or (end is not None and launch > end)
                 continue
+            if skipping:
+                continue  # level line of a sounding outside the requested range
             rows.append((
                 station, launch,
                 _num(line[9:15], 0.01),   # PRESS Pa -> hPa

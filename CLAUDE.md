@@ -21,6 +21,10 @@ Early build. Done so far: conda env `balloon` (Python 3.11, light packages only;
 
 Update this section as things are decided.
 
+## Evaluation harness (built 2026-10-20)
+
+`src/evaluate/gfs_vs_sondes.py` + `python -m scripts.compare_gfs_sondes --start D --end D` compare saved GFS runs with real soundings at FWD/CRP/DRT/MAF: wind error (RMSE of the vector error) at 500/300/200 hPa by lead, and "landing error" (the same simulated flight through forecast vs measured winds, launched from the station). Leads are multiples of 12 h so a 12Z run lines up with 00Z/12Z soundings. Winds are matched on the soundings' standard pressure levels; profiles below ground at high stations are dropped (`gfs_profile`). First smoke test on only 3 days (not a conclusion, n is 8 to 12 per lead): wind RMSE at 300 hPa grows from ~2.6 m/s at lead 0 to ~7 m/s at 120 h; median landing error from ~1 km at lead 0 to ~11 km at 120 h against ~9 to 19 km of drift. The raw GFS error is the baseline any correction model must beat. Details are written to `~/balloon-data/processed/eval/`. Three September 2026 v2 GFS files are kept locally for development.
+
 ## Core principles
 
 - **We post-process existing forecasts (GFS/HRRR/ECMWF); we don't forecast weather from scratch.** Models learn forecast errors and local bias.

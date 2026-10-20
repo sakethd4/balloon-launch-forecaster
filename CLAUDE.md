@@ -2,180 +2,105 @@
 
 ## Project
 
-Launch Window Forecaster: a tool for a university club's stratospheric weather balloon project. A large-scale training pipeline (run on Google Colab Premium) learns the errors of public weather forecasts, predicts flight-relevant conditions and outcomes (winds aloft, landing zone, ascent, drift) with uncertainty, and a dashboard visualizes predicted conditions for a user-chosen future window. Full description in [PROJECT.md](PROJECT.md). Read it before making design decisions.
+**Launch Planner**: a probabilistic flight simulator and web app for a university club's weather balloon (Austin, TX). A 4D physics simulator flies the balloon through real NOAA GFS forecasts; an ML layer learns how forecast winds err so the app can show a calibrated distribution of plausible flights, not one line; a decision layer ranks launch sites and hours. Club-facing description: [PROJECT.md](PROJECT.md). Read it before design decisions. The user wants **ML at the core, applied uniquely** (not a wrapper around GFS) and a clean interactive app. It is a learning project, so prefer clear, well-explained code.
 
-The project is a learning exercise for club members, so prefer clear, well-explained code over clever code.
+## Status (2026-10-20)
 
-## Status
+Done: data pipeline (GFS forecasts, IGRA soundings), 1D and 4D simulators, forecast-vs-sounding evaluation, bias-correction baseline, 21 passing tests, private repo https://github.com/sakethd4/balloon-launch-forecaster (branch `main`).
 
-Early build. Done so far: conda env `balloon` (Python 3.11, light packages only; see `environment.yml`), balloon config (`configs/balloon.yaml`), baseline trajectory simulator (`src/baselines/trajectory.py`, 6 passing tests), IGRA radiosonde ingestion (`src/ingest/igra.py`, verified against the real NOAA format spec), and a demo (`scripts/demo_flight.py`). Demo result: flying 594 Fort Worth soundings from Austin gives a median ~38 km drift (mostly east, max ~147 km) over ~54 min. Git repo: private, https://github.com/sakethd4/balloon-launch-forecaster (branch `main`). Data lives outside OneDrive, in `~/balloon-data` (override with `BALLOON_DATA_DIR`). Decided so far:
+Order of work agreed with the user: (1) validate the simulator against real flight tracks (SondeHub); (2) test cheap uncertainty ideas: landing-error shape (ellipse vs ring) and GEFS ensemble spread as a predictor; (3) build the learned wind-error model and push samples through the simulator; (4) decision layer and the web app (a first app version can come earlier). Hosting/sharing for the app is undecided (local, private link, or public) and so is live vs fixed-day forecasts; default is hosting-agnostic static site, fixed days first.
 
-- **Region:** launch sites near Austin, TX. Sites are **not chosen**: the tool searches a grid of candidate launch points and shows a site-suitability map, with optional user-supplied GeoJSON overlays of allowed/restricted areas (display only; the club decides what's allowed). Named sites may go in `configs/sites.yaml`. The dashboard shows a map of the whole forecast area, initially ~27–35°N, 103–92°W.
-- **Balloon:** 50 g latex (typically tops out ~50,000 ft), helium, payload ~80 g. Target ceiling ~45,000 ft (~13.7 km). Target ascent **350 m/min (~5.8 m/s)**, about 40 min to the ceiling. Parachute descent ~**15 m/s average** (~15 min from the ceiling), no rigging weight beyond the 80 g payload. Total flight under an hour. Fill volume is an unknown placeholder.
-- **Vertical domain:** surface to ~100 hPa. The balloon stays below the stratospheric turnaround layer, so jet-stream and upper-tropospheric winds (200–500 hPa) matter most. Most drift happens during the ~40 min ascent.
-- **Regulations/airspace:** the club handles these itself. Don't build regulatory layers or logic. Keep a one-line advisory disclaimer in the UI only. Physical hazards (water, cities) are still worth mapping.
-- **Colab:** verified working through the VS Code Colab extension (Python 3.13, Tesla T4, ~208 GB local disk). Colab Pro with **300 compute units** (corrected from 100 on 2026-10-20), so GPU time is limited but not scarce (see Compute). Measured: the 8 h CPU download run cost only ~1 unit.
-- **Local machine:** Windows 11, Anaconda Python 3.13.5, NVIDIA RTX 3050 6 GB laptop GPU, ~595 GB free disk. Use it for development, data work, baselines, and small-model debugging (costs no Colab units). 6 GB VRAM limits model size, so full-size training goes to Colab's T4.
-- **Drive ownership problem (found 2026-10-20):** the GFS files on Drive count against the *Colab* account's 5 GB quota, which is now full, so the `balloon-forecaster` folder is owned by the Colab account, not the 1 TB account as planned. Plan: upload the complete local copy (`~/balloon-data/processed/gfs`) to a new folder owned by the 1 TB account, share it with the Colab account as Editor, add a shortcut to the Colab account's My Drive, run the notebook's check cell against the new location, and only then delete the old folder AND empty the Drive trash (trashed files still count). Status: pending the user. Archived (not deleted) local files live in `~/balloon-data/archive/`.
-- **Drive folder zips came up short (2026-10-20):** downloading the `gfs` folder from Drive web gave two ~1.9 GB zips plus a tiny third zip (4 MB, then 8 MB on a retry) holding only 4 files we already had, valid but useless. Result: 1,930 of 2,037 files, the missing 107 being the newest-written ones (2026-05-31, 06-02 to 07-31, 08-04 to 08-31, 10-01 to 10-18, i.e. roughly the last ~25 minutes of the Colab run). Likely cause (not proven): Colab's Drive mount caches writes, so the last files were visible to the runtime (the check cell saw 2,037) but never fully synced to Drive's servers, so the Drive copy may itself be incomplete. Lessons: do NOT trust the Colab check cell as proof the data is on Drive; call `drive.flush_and_unmount()` at the end of a download session (now the last notebook cell); verify against Drive web / a fresh mount. The laptop copy is the master: it has 1,932 of 2,037 files, all opened and verified (no corrupt files, no NaN winds); missing 105 days: 2026-06-03 to 07-31, 08-04 to 08-31, 10-01 to 10-18. The user chose to collect those on Colab rather than wait ~3 h for the laptop (~105 s/day); the local download was stopped. Plan: (1) count what Drive really holds (flush, remount, verify cell; or Ctrl+A in the Drive folder), (2) if Drive holds nothing the laptop lacks, delete the Drive `processed/gfs` folder and empty the trash to free the Colab account's quota, (3) run the notebook for START=2026-06-03, END=2026-10-18 into the same folder, flush, verify, download the one small zip, extract (flatten the nested `gfs` folder) and verify the local total is 2,037, (4) then upload the full set to the 1 TB account.
-- **Shared Drive folder (original setup, now superseded by the note above):** verified. `balloon-forecaster` appears in the Colab account's My Drive, so `DATA_ROOT` is `/content/drive/MyDrive/balloon-forecaster`.
-- **Storage:** ~1 TB Google Drive, owned by a *different* Google account than the Colab account (see below).
+## Constraints and decisions
 
-Update this section as things are decided.
+- **Balloon:** 50 g latex (tops out ~50,000 ft), helium, 80 g payload, no extra rigging. Target ceiling ~45,000 ft (13,716 m). Ascent 350 m/min (5.833 m/s, ~40 min). Parachute descent ~15 m/s average (~15 min). Fill volume unknown (placeholder). Parameters live in `configs/balloon.yaml` (`null` = unknown, never guess).
+- **Region:** Austin area, sites not chosen (a grid of candidate points will be evaluated). Forecast domain 27-35°N, 103-92°W. Vertical domain surface to 100 hPa; the balloon stays below the stratosphere so 200-500 hPa winds matter most; most drift happens during the climb.
+- **Regulations/airspace:** the club handles them. Build no regulatory logic. A user-supplied GeoJSON allowed/restricted overlay may be displayed (display only). Physical hazards (water, cities) may be mapped. Keep a one-line advisory disclaimer in the UI.
+- **Machines:** Windows 11 laptop, NVIDIA RTX 3050 6 GB, ~595 GB disk, Anaconda; conda env `balloon` (Python 3.11: numpy, pandas, xarray, scipy, netCDF4, zarr, requests, pyyaml, matplotlib, pytest, cfgrib, eccodes, scikit-learn; see `environment.yml`). Colab Pro via the VS Code Colab extension, **300 compute units**: a CPU runtime is nearly free (an 8 h run cost ~1 unit, measured); T4 GPU rate unmeasured (roughly 1.5 to 2 units/h from memory). Use the laptop first, Colab CPU for big downloads, Colab GPU only for full-size training and only after a short test run.
+- **Storage/accounts:** project in OneDrive; data outside it in `~/balloon-data` (override `BALLOON_DATA_DIR`). **The laptop copy of all data is the master.** Google accounts: the Colab account has only 5 GB of its own Drive; a separate account has 1 TB. The Colab account's `balloon-forecaster` Drive folder was created in the Colab account (not shared from the 1 TB one), filled its quota, was emptied after the laptop copy was verified, then refilled only with the last block (2026-06-03 to 2026-10-18, ~0.3 GB) plus `balloon_code.zip`. Optional, pending: upload the full dataset to a folder owned by the 1 TB account, share it with the Colab account as Editor, add a shortcut in the Colab account's My Drive, verify, then delete the old folder and empty the Drive trash (trashed files still count).
 
-## Evaluation harness (built 2026-10-20)
+## Key findings (baselines any ML must beat)
 
-`src/evaluate/gfs_vs_sondes.py` + `python -m scripts.compare_gfs_sondes --start D --end D` compare saved GFS runs with real soundings at FWD/CRP/DRT/MAF: wind error (RMSE of the vector error) at 500/300/200 hPa by lead, and "landing error" (the same simulated flight through forecast vs measured winds, launched from the station). Leads are multiples of 12 h so a 12Z run lines up with 00Z/12Z soundings. Winds are matched on the soundings' standard pressure levels; profiles below ground at high stations are dropped (`gfs_profile`). **BASELINE RESULT (raw GFS, 2021-03-22 to 2026-10-18, 2,037 runs, 821,417 level comparisons, 81,815 flights, ~7,100 to 7,800 per lead):** wind RMSE (vector, m/s) at 200/300/500 hPa grows from 3.8/3.5/3.0 at lead 0 to 11.9/11.0/7.8 at 120 h. Median landing error 2.3 km (lead 0), 3.8 (24 h), 7.7 (72 h), 12.6 km (120 h); p90 5.5, 8.6, 16.9, 27.7 km. Median drift is ~46 km at every lead. By season, median drift is ~80 km in DJF vs ~18 km in JJA; median landing error at 72 h is 9.5 (DJF), 8.4 (MAM), 6.9 (JJA), 6.9 (SON) km, so error is bigger in winter in km but much smaller relative to drift (at 120 h: DJF 16.4 of ~80 km, about 21%; JJA 10.3 of ~18 km, about 56%). Lead 0 error (2.3 km median) is a floor from representativeness (stations vs grid, snapshot profile), not forecast skill. **This is the baseline any correction model must beat.** Caveats: soundings are 270+ km from Austin; the flight is a snapshot-profile simulation launched at the station; GFS model upgrades after v16 are unchecked and may shift error statistics across the period; no climatology baseline yet. Raw per-pair results are saved in `~/balloon-data/processed/eval/`. **BIAS-CORRECTION BASELINE (`scripts/bias_baseline.py`, mean error by station/season/lead/level learned on 2021 to 2024, tested on 2025 to 2026, 24,134 flights):** wind RMSE improves only 0.3% to 1.6% (mean error is ~0.7 m/s at 300 hPa vs ~7.5 m/s RMSE, so the error is mostly random; in-sample gain is only 1.2%, so this is not a bug). Landing error improves a little more because the small westerly bias pushes every flight the same way: pooled-correction median 3.8 -> 3.5 km at 24 h (-7.9%), 7.9 -> 7.5 km at 72 h (-5.1%), 12.7 -> 12.5 km at 120 h (-1.6%); p90 changes ~1 to 5%; the correction shrinks the landing error in 56% to 65% of flights. Per-station and pooled versions are nearly identical (no station-specific bias, so a pooled correction should transfer to Austin as well as anything). Practical size: a few hundred metres, far below the ~17 km p90 at 72 h. A fancier model (LightGBM etc.) should be expected to add little; the value is in uncertainty regions and the dashboard. The raw GFS error is the baseline any correction model must beat. Details are written to `~/balloon-data/processed/eval/`. Three September 2026 v2 GFS files are kept locally for development.
+All from `scripts.compare_gfs_sondes` over 2021-03-22 to 2026-10-18: 2,037 GFS 12Z runs, 821,417 level comparisons, 81,815 flights, four stations FWD/CRP/DRT/MAF (270+ km from Austin).
 
-## 4D flight simulator and the web app (started 2026-10-20)
+- Raw GFS wind RMSE (vector, m/s) at 200/300/500 hPa: 3.8/3.5/3.0 at lead 0 to 11.9/11.0/7.8 at 120 h. Median landing error 2.3 (0 h), 3.8 (24 h), 7.7 (72 h), 12.6 km (120 h); p90 5.5, 8.6, 16.9, 27.7 km. Median drift ~46 km at every lead (DJF ~80 km, JJA ~18 km). Lead-0 error is a representativeness floor, not skill. Error is larger in winter in km but smaller relative to drift (120 h: DJF ~21% of drift, JJA ~56%).
+- Bias correction (mean error by station/season/lead/level, train 2021-2024, test 2025-2026, 24,134 flights; `scripts.bias_baseline`): wind RMSE improves 0.3 to 1.6%; mean 300 hPa error ~0.7 m/s vs ~7.5 m/s RMSE, so error is mostly random (in-sample gain only 1.2%, so not a bug). Landing median improves 3.8->3.5 km (24 h, -7.9%), 7.9->7.5 (72 h, -5.1%), 12.7->12.5 (120 h, -1.6%), improving 56 to 65% of flights. Per-station and pooled versions are nearly identical.
+- 4D vs frozen-profile simulator from Austin at 13Z: differ ~0.5 km mean / 1.8 km max (September, drift ~20 km) and ~1.5 km mean / 4.8 km max (January, drift ~77 km), about the size of the forecast error at 1 to 2 days. ~70 ms per flight in Python.
+- Predictability of error SIZE (gradient boosting on log landing error, same time split): R2 0.35 with lead time alone, 0.37 + month, 0.39 + drift distance. Predicted error tracks actual across 5 buckets (2.5 to 11.3 km predicted; actual median 2.5 to 12.6, p90 5.8 to 26.3), mostly via lead time.
+- Not yet tested: error DIRECTION/shape (saved flights CSV has only distances; recompute vector errors), GEFS spread, real tracks.
 
-Direction change: raw GFS is already good and ML adds little, so the main deliverable is now an interactive **web app** that shows launch sites and the flight/descent path, not a model. `src/baselines/trajectory4d.py` (`WindField4D`, `simulate_flight_4d`) flies a balloon through a gridded forecast: winds interpolated linearly in lat, lon and forecast time, vertically via each column's geopotential heights, 10 m wind at the ground, RK2 stepping, notes flagged if the flight leaves the grid or the forecast time range. 6 tests with hand-calculated answers (uniform, height-only vs the 1D simulator, time-growing, latitude-dependent, out-of-grid) all pass. Flat ground at a fixed elevation (default 150 m) is assumed, there is no terrain data yet. Real-data check from Austin at 13Z (8 am CDT): 4D vs the frozen-profile 1D simulator differ by ~0.5 km mean / 1.8 km max in September (drift ~20 km) and ~1.5 km mean / 4.8 km max in January (drift ~77 km), about the size of the forecast's own error at 1 to 2 days, so 4D is worth having but changes no conclusion. Python takes ~70 ms per flight. Planned app: static site (HTML/JS, hosting-agnostic) with the simulator ported to JavaScript so sliders are instant (validate the port against the Python reference), driven by a compact JSON of the latest forecast; click-to-set launch site, flight path coloured by altitude, landing marker with an uncertainty ring from the error tables (median/p90 by lead), launch-hour timeline, site-suitability grid with optional user GeoJSON overlay, wind-by-altitude profile. Open decisions for the user: hosting/sharing (local only, private link, public) and whether the forecast is live (needs a scheduled data job, e.g. GitHub Actions) or fixed archived days.
+## ML direction
 
-## ML direction (discussed 2026-10-20): probabilistic flight forecasting
-
-The user wants ML at the core, applied uniquely to "where/when to launch and how the flight goes", not just wrapping GFS. Honest framing: ML is not for beating GFS at winds (bias correction gained only a few %), it is for predicting the DISTRIBUTION of where the balloon goes. Evidence so far: with a time split (train 2021-2024, test 2025-2026, 24,134 flights), a gradient-boosted model of log landing error gets R2 0.35 from lead time alone (the existing error table), 0.37 adding month, 0.39 adding drift distance, and its predicted error tracks actual error across 5 test buckets (predicted 2.5 to 11.3 km vs actual median 2.5 to 12.6, p90 5.8 to 26.3 km), but most of that is the lead-time effect, so simple features add only modestly. Not yet tested: landing error DIRECTION/shape (likely elongated along the wind, so an ellipse could beat a ring at equal coverage; the saved flights CSV only has distances, recompute vector errors to test), GEFS ensemble spread as a flow-dependent predictor (the usual best predictor of forecast uncertainty), and real flight tracks. Candidate components, each needing a baseline, a time-split test and calibration checks (coverage of 50/90% regions, log score or CRPS): (1) a conditional generative model of wind-profile ERROR (vertical structure) whose samples are pushed through the physical simulator, giving flight-path distributions that work for any launch time or balloon configuration; (2) validation and residual learning against real flight tracks: SondeHub's open telemetry archive (`s3://sondehub-history`, anonymous, CC BY-SA 2.0, GPS tracks of meteorological radiosondes; the `sondehub` Python package downloads by serial number; sensor values are uncalibrated, GPS is fine; amateur-balloon coverage in the archive is unverified); (3) analog ensembles (kNN on forecast fields with a learned similarity); (4) a decision layer that picks launch site and hour to maximise the probability of a good landing, shown in the app as a landing-probability heat map from a cloud of sampled flights. scikit-learn is now installed in the `balloon` env.
+ML is not for beating GFS at winds; it is for the DISTRIBUTION of where the balloon goes. Components, each with a baseline (the lead-time error table), a time-split test and calibration checks (coverage of 50/90% regions, log score or CRPS): (1) conditional generative model of wind-profile ERROR by altitude whose samples go through the physics simulator, so it works for any launch time or balloon setup; (2) validation and residual learning against real tracks: SondeHub (`s3://sondehub-history`, anonymous, CC BY-SA 2.0, GPS tracks of meteorological radiosondes, `sondehub` Python package downloads by serial; sensor values uncalibrated, GPS fine; amateur-balloon coverage unverified); (3) analog ensembles (kNN on forecast fields); (4) decision layer maximizing probability of a good landing, shown as a landing-probability heat map from sampled flights. Report honestly if a model fails to beat the baseline.
 
 ## Core principles
 
-- **We post-process existing forecasts (GFS/HRRR/ECMWF); we don't forecast weather from scratch.** Models learn forecast errors and local bias.
-- **Baselines first.** Climatology, raw forecast, the physics trajectory predictor, and the rule-based score must exist before any ML. ML results are only meaningful relative to them.
-- **Time-based train/val/test splits only.** Never random-split weather data (leakage across adjacent days).
-- **Report uncertainty.** Models output distributions/quantiles, landing predictions are regions, and uncertainty must be calibrated (check calibration curves, not just accuracy).
-- **Be honest in evaluation.** Report where the model fails or ties the baseline.
-- **Safety framing.** The tool is advisory only. Never word outputs as a go/no-go authorization. The club handles regulations itself, so don't build regulatory logic; a one-line advisory disclaimer in the UI is enough.
+- **Post-process existing forecasts (GFS etc.); do not forecast weather from scratch.**
+- **Baselines first.** Raw forecast, the lead-time error table and the bias correction exist; ML results only mean something relative to them.
+- **Time-based splits only** (train 2021-2024, test 2025-2026 so far). Never random-split weather data.
+- **Report uncertainty, calibrated.** Check calibration, not just accuracy. Be honest about ties and failures.
+- **Advisory only.** Never word outputs as a go/no-go authorization.
 
-## Architecture
-
-```
-Ingest (sharded, cached) -> Raw store -> Preprocess/align -> Training store (Zarr)
-   -> Train (Colab GPU, config-driven, checkpointed) -> Evaluate (time-split) -> Tracker/registry
-   -> Scheduled inference on newest forecast -> Forecast products (files) -> Dashboard
-```
-
-The dashboard only **reads** precomputed forecast products. It never runs models live.
-
-## Compute: Google Colab Premium
-
-Training runs on Colab. Design everything around its constraints:
-
-- Runtimes are ephemeral: they disconnect on idle or max session length and local disk is wiped. **Checkpoint regularly to Drive/bucket and support automatic resume.** Never keep the only copy of anything on the runtime disk.
-- Datasets, checkpoints, and results live on Google Drive or a cloud bucket. Read Zarr in chunks; don't load full datasets into memory.
-- **Code lives in Git; notebooks are thin launchers** that clone the repo, mount storage, and call `python -m src.train --config configs/<name>.yaml`. No pipeline logic in notebooks.
-- Ingestion and preprocessing are sharded (e.g. one month per shard), idempotent, and restartable.
-- Debug on a tiny subset locally first. Use mixed precision and gradient accumulation to use GPU time well.
-- **Compute budget: 300 units (~150 T4 hours if a T4 uses roughly 1.5–2 units/hr, which is from memory and not yet measured; CPU is nearly free: ~1 unit per 8 h, measured).** Do downloading, preprocessing, baselines, LightGBM, and small-model debugging locally (the laptop's RTX 3050 is free to use) or on CPU runtimes; use the Colab GPU only for full-size deep-model training. Never start a long GPU run without a short test run first and the user's go-ahead. Remind the user to disconnect idle runtimes. Log units spent per experiment.
-
-### Storage across two Google accounts
-
-The Colab account and the 1 TB Drive's owner account differ. A Colab runtime can only mount the Drive of the account it is signed in with. Plan:
-
-1. The Drive owner creates a folder (e.g. `balloon-forecaster`) and shares it with the Colab account as **Editor**.
-2. In the Colab account's Drive, add a shortcut to that folder under My Drive ("Shared with me" → right-click → Add shortcut to Drive).
-3. Notebooks mount Drive and use `DATA_ROOT` pointing at the shortcut. Shared-folder files count against the owner's quota.
-
-Keep `DATA_ROOT` in one config value so the location can change. Fallback if mounting doesn't work in the VS Code extension: write to Colab local disk and sync to Drive with a tool such as rclone, or use a cloud bucket. Don't hardcode Drive paths in pipeline code.
-
-### How Claude can reach Colab
-
-Claude can't touch Colab on its own. Two official routes exist (verify current setup steps before relying on them):
-
-1. **Colab MCP server** (open source, `googlecolab/colab-mcp`): lets an MCP client like Claude Code create notebooks and run cells in a browser-based Colab session. Requires the user to connect and authorize it in their own browser and Google account.
-2. **Colab VS Code extension:** lets the user select a Colab runtime (including Premium GPUs) as the kernel for local `.ipynb` files in VS Code. This is the lowest-effort route since the user already uses VS Code.
-
-Claude never asks for or handles Google credentials, tokens, or auth codes. The user does all sign-in themselves. Until one of these is set up, Claude writes code and notebooks locally, and the user runs the heavy jobs on Colab.
-
-## Planned stack (proposed, not yet confirmed)
-
-- Python 3.11+, environment via `venv` or `uv`
-- Data: `pandas`, `xarray`, `zarr`, `dask`, `cfgrib`/`netCDF4`, `requests`, `cdsapi` (ERA5), `s3fs` (AWS Open Data)
-- Modeling: `scikit-learn`, `lightgbm`, PyTorch (with Lightning if the team agrees)
-- Config and tracking: YAML configs (Hydra optional), Weights & Biases or TensorBoard
-- Trajectory baseline: CUSF/Tawhiri or a small custom integrator
-- Dashboard: Streamlit + Plotly + pydeck/folium
-- Tests: `pytest`
-
-Confirm choices with the user before installing heavy dependencies or locking in a layout.
-
-## Proposed layout
+## Architecture and layout
 
 ```
-configs/         # one YAML per experiment/run (seed, data range, model, hyperparameters)
-data/raw/        # downloaded forecasts and soundings (gitignored; mirrored on Drive)
-data/processed/  # Zarr/Parquet training store (gitignored; mirrored on Drive)
-src/ingest/      # one module per data source; sharded and idempotent
-src/features/    # feature engineering and dataset classes
-src/baselines/   # trajectory predictor, rule-based score, climatology
-src/models/      # tabular and deep models, calibration
-src/train.py     # config-driven training entry point with checkpoint/resume
-src/evaluate/    # time-split evaluation, metrics (RMSE, CRPS, coverage, ranking)
-src/inference/   # scheduled job that writes forecast products
-app/             # Streamlit dashboard (reads forecast products only)
-notebooks/       # Colab launchers and exploration only
-tests/
+GFS + IGRA ingest -> ~/balloon-data/{raw,processed} -> 4D simulator (src/baselines)
+   -> uncertainty layer (src/models, planned) -> forecast products (JSON) -> web app (planned)
 ```
 
-## Visualization requirements
-
-The dashboard lets the user choose a future window (start/end) and shows:
-
-1. Launch-window score timeline with uncertainty band and lead-time confidence
-2. Time-by-altitude wind heatmap with direction (jet stream visible)
-3. Surface wind, temperature, cloud cover, and precipitation timelines with intervals
-4. **Regional forecast map of the whole Austin-area domain** (centerpiece): choose time, altitude layer, and variable; wind arrows; time slider across the window
-5. Landing map: flight path and percentile landing regions on the same map, plus a **site-suitability mode** that colors a grid of candidate launch points and supports a user-loaded GeoJSON overlay of allowed/restricted areas; physical hazards marked
-6. Raw forecast vs corrected forecast overlay
-7. Per-factor score breakdown and historical accuracy at that lead time
-
-Colors and chart choices should be accessible and consistent. Always label values as forecasts with uncertainty, and label the tool as advisory.
+```
+configs/balloon.yaml            balloon parameters
+notebooks/01_colab_gfs_download.ipynb   Colab launcher for big GFS downloads
+scripts/                        fetch_gfs, download_igra, compare_gfs_sondes, bias_baseline, make_colab_bundle
+src/paths.py                    data locations
+src/ingest/                     gfs.py (AWS GFS, byte-range, ecCodes), igra.py (soundings)
+src/baselines/                  trajectory.py (1D), trajectory4d.py (4D, WindField4D)
+src/evaluate/gfs_vs_sondes.py   forecast-vs-sounding comparison and landing error
+src/models/bias_correction.py   cheap baseline
+tests/                          21 tests (pytest)
+```
+Planned: `src/uncertainty/` (learned layer), SondeHub ingest, `web/` (app).
 
 ## Conventions
 
-- Units: SI internally (m, m/s, K, Pa). Convert only for display. Name units in variables/columns where not obvious (e.g. `wind_speed_ms`, `alt_m`).
-- All timestamps are UTC internally and timezone-aware. Convert to local time only in the UI.
-- Altitude: state whether it is geopotential height, geometric height, or pressure level. Don't mix them silently.
-- Wind direction: meteorological convention (direction wind comes *from*) in raw data. Convert to u/v components for any math.
-- Forecast data must carry both the **valid time** and the **issue/init time** (lead time = valid - init). Mixing these up silently leaks future information.
-- Downloads are cached and idempotent. Raw data is never edited in place.
-- Every training run: fixed seed, saved config, git commit hash recorded with checkpoints, metrics logged to the tracker.
-- Keep API keys and credentials out of the repo (environment variables or a gitignored `.env`; Colab secrets for Colab runs).
-- Add short docstrings explaining the *why* for non-obvious meteorology or modeling choices, since teammates are learning.
+- SI units internally (m, m/s, K, Pa); name units in columns (`wind_speed_ms`). UTC, timezone-aware timestamps everywhere; convert only in the UI.
+- Altitude: say which (geopotential height, geometric, pressure level); the simulators use geopotential height as altitude. Wind direction in raw data is where it comes FROM; use u/v for math.
+- Forecast data carries init time and valid time (lead = valid - init); mixing them leaks the future.
+- Downloads are cached, idempotent and restartable; raw data is never edited. Credentials never go in the repo or the chat (env vars, `~/.cdsapirc`, Colab secrets).
+- Docstrings explain the *why* of non-obvious meteorology or modeling.
 
 ## Working agreements for Claude
 
-- Check this file and PROJECT.md first, and keep them current when decisions change (launch site, balloon specs, stack, results).
-- Ask before downloading large datasets (GFS/ERA5 pulls can be many GB), starting long or costly Colab runs, or adding dependencies.
-- Always report the baseline comparison alongside any model result.
-- Watch for leakage: time splits, valid vs init time, and any feature that wouldn't be known at forecast time.
-- Don't invent flight data or balloon specs. If a value is unknown (balloon mass, payload mass, burst diameter, ascent rate), mark it as a placeholder and ask.
-
-## Open questions (resolve and then record here)
-
-- Grid spacing and extent for candidate launch points around Austin (default to be proposed)
-- Where the club's allowed/restricted-area data comes from (GeoJSON/KML export?)
-- Confirm nearest radiosonde stations (FWD, CRP, DRT, MAF are the expected ones)
-- Fill volume (compute from total mass and the 350 m/min target)
-- Does the club have any past flight logs?
-- Forecast horizon the club cares about (e.g. 3 vs. 7 days)
-- Dashboard hosting: local only, or shared with club members?
+- Tell the user what you do as you go, in plain words; they want to follow along. The user gave standing permission to do what is needed (install into the `balloon` env, run jobs, commit and push) as long as it is reported. Still ask before large downloads, long or costly Colab GPU runs, or heavy new dependencies.
+- **Do not wait on long jobs.** Run them in the background (`run_in_background`), do not poll or sleep, and report when the completion notice arrives.
+- Keep this file, PROJECT.md and the memory files current when decisions or results change. Commit and push after changes (commit messages end with the Co-Authored-By line from the session instructions).
+- Always report the baseline comparison next to any model result. Watch for leakage (time splits, valid vs init time, features unknown at forecast time).
+- Never invent flight data or balloon specs; mark unknowns as placeholders. Never ask for or handle Google or GitHub credentials; the user signs in themselves.
 
 ## Commands
 
-Run from the project root `C:\Users\saket\OneDrive\Documents\tsl larp`, using the `balloon` conda env:
+From the project root `C:\Users\saket\OneDrive\Documents\tsl larp`, env `balloon`:
 
 - Tests: `conda run -n balloon python -m pytest -q`
-- Demo: `conda run -n balloon python -m scripts.demo_flight`
+- For jobs that read GRIB (ecCodes), call the env's python directly with `C:\Users\saket\anaconda3\envs\balloon\Library\bin` on PATH and `-u`; `conda run` buffers all output until exit.
+- Fetch GFS (slow on the laptop, ~105 s/day; use Colab for bulk): `python -u -m scripts.fetch_gfs --start D --end D`
+- Comparison over a range (~45 min for all 5 years): `python -u -m scripts.compare_gfs_sondes --start 2021-03-22 --end 2026-10-18`
+- Bias baseline: `python -u -m scripts.bias_baseline` (needs the comparison CSVs; `--skip-landing` for the instant wind part)
+- Rebuild the Colab code zip: `python -m scripts.make_colab_bundle` (writes `dist/`, gitignored)
 
-Add train, evaluate, inference, and run-dashboard commands here once they exist.
+## Data notes (lessons that still matter)
 
-## Data notes
+- **GFS** (`src/ingest/gfs.py`): public AWS bucket `noaa-gfs-bdp-pds`, 0.5° files `gfs.DATE/HH/atmos/gfs.tHHz.pgrb2.0p50.fFFF` with an `.idx` giving each field's byte range, so only needed fields are fetched (u, v, t, gh, r on 21 levels 1000-100 hPa; 10 m wind, 2 m temp, MSL pressure, cloud cover, precipitation) and cropped to Texas. Stored one NetCDF per (date, cycle): `~/balloon-data/processed/gfs/gfs_0p50_v2_YYYYMMDD_t12z.nc` (~2.2 MB). **Complete: 2,037 files, 12Z run, 21 steps (0-120 h every 6 h), 2021-03-22 to 2026-10-18, 4.5 GB, verified.**
+- Archive begins 2021-01-01, but the folder layout and model change on **2021-03-22 (GFS v16)**, so `gfs.FIRST_SUPPORTED_DAY` refuses earlier dates. Smaller GFS updates after v16 are unchecked and could shift error statistics; check before trusting errors across the whole period.
+- Ingestion lessons: AWS gives each connection little bandwidth from this laptop (~0.15 MB/s) but connections do not share the limit, so ranges are fetched in parallel; **ecCodes is not thread-safe** (download in threads, decode serially or in separate processes); direct ecCodes decoding is ~7x faster than cfgrib; GFS stores cloud cover and precipitation twice per step, so the code keeps instantaneous `tcc` and 6 h `tp`; `tp` is NaN at step 0 on purpose; a 404 is reported as a missing day, not an outage. File names carry `SCHEMA_VERSION`; bump it whenever file contents change (v1 files, which had an arbitrary tcc/tp pick, are ignored).
+- Colab bulk runs: ~20 to 29 s per day per process; two processes ran ~1.4x faster than one. Colab writes to Drive through a cache, so **the notebook check cell can see files that never reached Drive**; always `drive.flush_and_unmount()` then remount before trusting a count. Drive web folder downloads were unreliable (zips of ~1.9 GB plus tiny leftovers); verify counts after extracting and flatten the nested `gfs` folder.
+- **IGRA soundings** (`src/ingest/igra.py`): full history for FWD `USM00072249`, CRP `USM00072251`, DRT `USM00072261`, MAF `USM00072265` in `~/balloon-data/raw/igra/` (CRC-checked). Fixed-width format parsed from NOAA's spec; missing = -9999/-8888; wind speed tenths of m/s, temperature tenths of °C, pressure Pa. `parse(..., start, end)` skips other years quickly. Austin has no sounding station.
+- Eval outputs in `~/balloon-data/processed/eval/`: `gfs_vs_sondes_levels.csv` (per level, 70 MB), `gfs_vs_sondes_flights.csv`, `bias_baseline_flights.csv`.
+- **Possible data:** GEFS ensemble (uncertainty predictor); ERA5 for winds over Austin itself and climatology (CDS API with a user-created token in `~/.cdsapirc` and the dataset licence accepted, with area subsetting; the ARCO-ERA5 Google Cloud copy has global hourly chunks, ~154 MB per variable, so regional pulls are heavy; ERA5 assimilates the same soundings, so it is a cross-check, not independent truth, and cannot be a forecast input); HRRR analyses and AMDAR aircraft winds (access and archive dates unchecked); the club's own flights.
 
-- IGRA soundings (verified): files are `USM000722xx-data-beg2026.txt.zip` (year to date, small) and `USM000722xx-data.txt.zip` (full history, large; ask before downloading). Stations: FWD `USM00072249`, CRP `USM00072251`, DRT `USM00072261`, MAF `USM00072265`. Austin has no sounding station; the nearest are 280+ km away, so sounding winds are a proxy for Austin's winds, not exact.
-- **Downloaded and verified:** full history for all four stations in `~/balloon-data/raw/igra/` (~370 MB zipped, CRC OK, sounding counts match NOAA's station list; FWD from 1937, CRP 1953, DRT 1954, MAF 1930, all through Oct 2026). Re-fetch with `python -m scripts.download_igra`. They are large once unzipped, so `igra.parse` on a full file is slow and memory-heavy: restrict to recent years and save as Parquet before modeling.
-- **GFS archive (measured, not yet downloaded):** public AWS bucket `noaa-gfs-bdp-pds`, files `gfs.YYYYMMDD/HH/atmos/gfs.tHHz.pgrb2.{0p25,0p50,1p00}.fFFF` with a `.idx` file per GRIB that lists the byte range of every field, so we can download only the fields we need with HTTP Range requests. Archive starts around 2021-01-01 (nothing in 2020), about 5.8 years. GRIB messages are global, so cropping to Texas happens after download. Fields wanted: UGRD, VGRD, TMP, HGT, RH on 21 levels (1000 to 100 hPa) plus 10 m wind, 2 m temp, MSL pressure, cloud cover, precipitation. Measured size per forecast step for those fields: 0.25° 91.7 MB, 0.5° 27.7 MB, 1.0° 7.9 MB. Measured home download speed: ~17 MB/s (one stream). Raw GRIB is transient (crop, then delete); the cropped store is only a few GB.
-- **GFS ingestion lessons (`src/ingest/gfs.py`, `scripts/fetch_gfs.py`):** (1) AWS throttles each connection (~0.15 MB/s at times, though one test earlier hit 17 MB/s), but connections don't share the limit, so fetch byte ranges in parallel threads. (2) **ecCodes/cfgrib is not thread-safe**: download in threads, decode serially. (3) Running the env's python directly (not via `conda run`) needs `C:\Users\saket\anaconda3\envs\balloon\Library\bin` on PATH or ecCodes isn't found. `conda run` buffers all output until exit, so for long jobs use the env python with `python -u`. (4) APCP does not exist at step 0, so `tp` is NaN there on purpose. (5) Output is one NetCDF per (date, cycle), ~3 MB per run, in `~/balloon-data/processed/gfs/`.
-- **Download throughput and alternatives (measured 2026-10-19/20):** the local pilot ran at ~3.5 min per day of GFS (32 parallel connections, ~2.8 MB/s total), so 5.8 years of daily data would take ~124 h locally. Evidence points to a slow network path from the laptop to AWS (every AWS S3 endpoint and a different NOAA bucket gave ~0.15 MB/s per connection, Cloudflare gave 12.6 MB/s, no 403/429/503 errors, speed scales with parallel connections), not bot detection. **Settled 2026-10-20 by a Colab speed test: Colab got 27.5 MB/s on one connection and 73.3 MB/s on eight, vs ~0.15 MB/s per connection on the laptop, so the bottleneck is the laptop's network path, not AWS/NOAA or bot detection.** Do bulk downloads on Colab (CPU runtime); decoding speed on Colab's CPU is not yet measured, and if it dominates, decode days in parallel with separate processes (never threads). Ideas, in order: (1) run the bulk download on a Colab CPU runtime (cheap in units) and write only the cropped files to Drive, shipping the code as a zip uploaded to the shared Drive folder (the repo is private; never ask for a GitHub token in chat); (2) cut volume: sounding times are 00Z/12Z, so for a 12Z init only leads that are multiples of 12 h pair with soundings (11 steps instead of 21); 6-hourly steps are only needed later for maps; every 2nd or 3rd day loses little. Checked and rejected: dynamical.org's `noaa-gfs-forecast` Zarr (init 4x/day since 2021-05-01, small cheap reads) has only surface and 10/80/100 m fields, NO pressure-level winds, so it cannot give winds aloft (could still supply cheap surface/cloud/precip features). NOMADS grib filter only covers recent days. RDA regional subsetting for the GFS archive is unconfirmed.
-- **GFS reader and file versions (2026-10-20):** cfgrib was the bottleneck (~2.7 to 5 s per step vs 0.4 s decoding the same messages directly with ecCodes), so `gfs.read_step` now uses ecCodes directly (the old one is kept as `_read_step_cfgrib` only to cross-check; the two match exactly on all 9 unambiguous variables). GFS stores cloud cover and precipitation twice per step (instantaneous + 6 h average; 6 h + since-start accumulation), so the choice is explicit: **instantaneous `tcc`, 6 h `tp` accumulation**. Output files carry `SCHEMA_VERSION` in the name (`gfs_0p50_v2_YYYYMMDD_t12z.nc`); **v1 files have an arbitrary tcc/tp variant** (their winds/temperature/humidity/height were fine) and the downloader ignores them. The laptop pilot's v1 files were deleted on 2026-10-20; the 3 v1 Colab test days (Aug 1-3) may still be on Drive and can be deleted. Colab measured ~20 s per day with the new reader (laptop ~210 s), so bulk GFS downloads run on Colab, not the laptop. Bump `SCHEMA_VERSION` whenever file contents change. A Colab run printed `double free or corruption` at interpreter exit after finishing; files were written first, so likely harmless, but verify files after each run.
-- **GFS archive start and model versions (checked 2026-10-20):** the AWS archive's first day is 2021-01-01 (nothing earlier). Until 2021-03-21 files sit at `gfs.DATE/HH/gfs.tHHz...` (no `atmos/` folder) and have only a 6 h average cloud cover; from **2021-03-22** (GFS v16 went live) they sit under `gfs.DATE/HH/atmos/`. `gfs.FIRST_SUPPORTED_DAY` = 2021-03-22 and the code refuses earlier dates, so the full run covers 2021-03-22 to 2026-10-18 (~2,037 days, ~20 s/day on Colab, ~2 processes in parallel). A model upgrade changes forecast error behaviour, so never mix versions silently in training; NOAA also ships smaller GFS updates after v16 whose dates I have not checked, so check before trusting error statistics across the whole period (consider a "model version" feature or a time split that respects upgrades). A 404 from NOAA is reported as a missing day, with no retries and no strike against the stop-after-5-failures rule.
-- **Full GFS dataset COMPLETE (2026-10-20):** 2,037 v2 files (12Z run, 21 steps, 0.5 degrees, Texas crop, 2021-03-22 to 2026-10-18), 4.5 GB, none missing, all opened and verified, on Drive in `balloon-forecaster/processed/gfs/`. The Colab run took 487 min with 2 processes (~29 s/day per process; two processes gave ~1.4x, not 2x, over one at ~20 s/day). It is NOT yet on the laptop (only 3 September 2026 days are). Extend later by rerunning the notebook with a new END (finished days are skipped).
-- **Possible future data (not started; user decides when):** (1) **ERA5 reanalysis** is the leading candidate for a gridded "truth" over Austin itself (the nearest sounding stations are 270+ km away) and gives hourly valid times, so many more training pairs. It needs a free Copernicus CDS account and API key that the *user* creates; never ask for the key in chat, read it from `~/.cdsapirc` or an env var. ERA5 is a model blend of observations, not a measurement, so keep the real soundings as an independent check (it assimilates those same soundings). **Access routes (checked via search 2026-10-20, not tested):** (a) Copernicus CDS API with a personal access token in `~/.cdsapirc` (or a Colab secret), the licence for the `reanalysis-era5-pressure-levels` dataset accepted on its page, and `area` subsetting so downloads are small; queue times unknown, so test one small request first and shard big ones; (b) ARCO-ERA5 on Google Cloud (`gs://gcp-public-data-arco-era5/...`, anonymous, hourly 0.25 degree, 37 levels), but its chunks are one global hour each (listed as ~154 MB per variable), so pulling a Texas box is heavy, and its end date is unverified. Prefer (a) for regional pulls. ERA5 cannot be a forecast input (ERA5T lags days), only training/evaluation/climatology. Ideas ranked: (1) climatology of simulated flights from a grid of Austin launch points over decades, by season and launch hour (independent of forecast skill, directly answers site/season questions); (2) GFS error measured at Austin and across the map, not only at the 4 stations; (3) many more training pairs (hourly, every grid point; strongly correlated, and the error is mostly random, so do not expect miracles); (4) a 4D trajectory simulator (winds vary in space and time) which can be built now with GFS. (2) More GFS cycles (00Z/06Z/18Z). (3) GEFS ensemble members for calibrated uncertainty. (4) HRRR analyses (check archive start date first). (5) AMDAR aircraft winds via MADIS (check access). (6) SondeHub flights and the club's own flights as final tests.
-- IGRA missing values are -9999 and -8888 (QC-removed). Wind speed is in tenths of m/s, temperature in tenths of °C, pressure in Pa.
+## Open questions
+
+- App hosting/sharing and live vs fixed-day forecasts.
+- Grid spacing and extent of candidate launch points; the format of the club's allowed-area data (GeoJSON/KML?).
+- Fill volume (compute from total mass and the ascent-rate target); any past club flight logs.
+- Whether SondeHub's archive covers enough tracks near Austin (and amateur flights); dates of GFS updates after v16.
+- Whether to move the dataset to the 1 TB account.

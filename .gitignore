@@ -1,6 +1,7 @@
 # Data and model artifacts live on Drive / local data dir, never in Git
 data/
 checkpoints/
+dist/
 runs/
 *.zarr/
 *.nc

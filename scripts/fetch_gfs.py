@@ -31,8 +31,7 @@ print(f"{len(days)} days, cycle {args.cycle:02d}Z, 0.5 degrees, steps {gfs.DEFAU
 failed, streak, t_start = [], 0, time.time()
 for i, day in enumerate(days, 1):
     t = time.time()
-    out = gfs.PROCESSED_DIR / "gfs" / f"gfs_0p50_{day:%Y%m%d}_t{args.cycle:02d}z.nc"
-    cached = out.exists()
+    cached = gfs.output_path(day, args.cycle).exists()
     try:
         path = gfs.fetch_run(day, args.cycle, workers=args.workers)
         streak = 0

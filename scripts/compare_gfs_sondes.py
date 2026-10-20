@@ -31,6 +31,9 @@ print(wind.to_string())
 print("\nLanding error: same simulated flight through forecast vs measured winds:")
 print(land.to_string())
 
+print("\nBy season (DJF = Dec-Feb, MAM = Mar-May, JJA = Jun-Aug, SON = Sep-Nov):")
+print(gfs_vs_sondes.summarize_by_season(levels, flights).to_string())
+
 out = PROCESSED_DIR / "eval"
 out.mkdir(parents=True, exist_ok=True)
 levels.to_csv(out / "gfs_vs_sondes_levels.csv", index=False)

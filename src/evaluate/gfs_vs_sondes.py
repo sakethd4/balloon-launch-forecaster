@@ -110,7 +110,28 @@ def run(start: date, end: date, stations=("FWD", "CRP", "DRT", "MAF"), lead_step
                         landing_error_km=distance_km(*t_obs.landing, *t_fc.landing),
                         obs_drift_km=distance_km(info["lat"], info["lon"], *t_obs.landing)))
         day += timedelta(days=1)
+        if (day - start).days % 100 == 0:
+            print(f"  ...{day} done ({len(flight_rows)} flights so far)", flush=True)
     return pd.DataFrame(level_rows), pd.DataFrame(flight_rows)
+
+
+SEASONS = {12: "DJF", 1: "DJF", 2: "DJF", 3: "MAM", 4: "MAM", 5: "MAM",
+           6: "JJA", 7: "JJA", 8: "JJA", 9: "SON", 10: "SON", 11: "SON"}
+
+
+def summarize_by_season(levels: pd.DataFrame, flights: pd.DataFrame, leads=(24, 72, 120)):
+    """Landing error and 300 hPa wind error by season (DJF = winter) at a few lead times."""
+    f = flights[flights.lead_h.isin(leads)].assign(season=lambda d: d.init.dt.month.map(SEASONS))
+    land = f.pivot_table(index="season", columns="lead_h", values="landing_error_km",
+                         aggfunc="median").round(1)
+    land.columns = [f"median landing error km @{c}h" for c in land.columns]
+    drift = f.groupby("season").obs_drift_km.median().round(1).rename("median drift km (all leads)")
+    lv = levels[(levels.level_hpa == 300.0) & levels.lead_h.isin(leads)].copy()
+    lv["season"] = lv.init.dt.month.map(SEASONS)
+    lv["sq"] = lv.du ** 2 + lv.dv ** 2
+    wind = lv.pivot_table(index="season", columns="lead_h", values="sq", aggfunc="mean").pow(0.5).round(1)
+    wind.columns = [f"wind RMSE 300 hPa m/s @{c}h" for c in wind.columns]
+    return pd.concat([land, drift, wind], axis=1).reindex(["DJF", "MAM", "JJA", "SON"])
 
 
 def summarize(levels: pd.DataFrame, flights: pd.DataFrame):

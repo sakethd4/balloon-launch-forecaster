@@ -60,10 +60,16 @@ def _fly(lat, lon, profile, elev_m):
 
 
 def run(start: date, end: date, stations=("FWD", "CRP", "DRT", "MAF"), lead_step_h: int = 12,
-        gfs_dir=None, cycle: int = 12):
+        gfs_dir=None, cycle: int = 12, corrections=None, with_levels: bool = True):
     """Compare every available GFS run in [start, end] with the matching soundings.
 
     Returns (levels, flights): wind errors per pressure level, and landing errors per flight.
+
+    corrections: optional {name: fn(station, season, lead_h, levels_hpa, u, v) -> (u, v)}.
+        Each one re-flies every flight with the corrected forecast winds and adds a
+        `landing_error_km_<name>` column next to the raw `landing_error_km`.
+    with_levels: set False to skip the per-level wind errors (faster) when only the
+        landing comparison is needed.
     """
     last_valid = pd.Timestamp(end) + pd.Timedelta(days=6)
     soundings = {}
@@ -89,7 +95,7 @@ def run(start: date, end: date, stations=("FWD", "CRP", "DRT", "MAF"), lead_step
                         continue
                     c = col.sel(lead_h=lead)
                     # 1. wind error on the pressure levels the sounding also reports
-                    for lev in c.isobaricInhPa.values:
+                    for lev in (c.isobaricInhPa.values if with_levels else ()):
                         m = snd[(snd.pressure_hpa - lev).abs() < 0.05].dropna(subset=["u_ms", "v_ms"])
                         if m.empty:
                             continue
@@ -105,10 +111,17 @@ def run(start: date, end: date, stations=("FWD", "CRP", "DRT", "MAF"), lead_step
                     fc = gfs_profile(c.gh.values, c.u.values, c.v.values, float(c.u10), float(c.v10),
                                      info["elev_m"])
                     t_obs, t_fc = (_fly(info["lat"], info["lon"], p, info["elev_m"]) for p in (obs, fc))
-                    flight_rows.append(dict(
+                    row = dict(
                         station=st, init=init, lead_h=lead,
                         landing_error_km=distance_km(*t_obs.landing, *t_fc.landing),
-                        obs_drift_km=distance_km(info["lat"], info["lon"], *t_obs.landing)))
+                        obs_drift_km=distance_km(info["lat"], info["lon"], *t_obs.landing))
+                    for name, correct in (corrections or {}).items():
+                        u2, v2 = correct(st, SEASONS[init.month], lead, c.isobaricInhPa.values,
+                                         c.u.values, c.v.values)
+                        fc2 = gfs_profile(c.gh.values, u2, v2, float(c.u10), float(c.v10), info["elev_m"])
+                        t2 = _fly(info["lat"], info["lon"], fc2, info["elev_m"])
+                        row[f"landing_error_km_{name}"] = distance_km(*t_obs.landing, *t2.landing)
+                    flight_rows.append(row)
         day += timedelta(days=1)
         if (day - start).days % 100 == 0:
             print(f"  ...{day} done ({len(flight_rows)} flights so far)", flush=True)

@@ -1,0 +1,16 @@
+name: balloon
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - xarray
+  - scipy
+  - netcdf4
+  - zarr
+  - requests
+  - pyyaml
+  - matplotlib
+  - pytest
+# Added later when needed: pytorch, lightgbm, streamlit, plotly, pydeck, dask, s3fs, cdsapi

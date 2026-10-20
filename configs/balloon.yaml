@@ -1,0 +1,8 @@
+# Balloon flight parameters. null = unknown placeholder, do not guess.
+balloon_mass_g: 50
+payload_mass_g: 80          # no extra rigging beyond this
+lift_gas: helium
+ascent_rate_ms: 5.833       # 350 m/min target
+descent_rate_ms: 15.0       # average under parachute
+burst_altitude_m: 13716     # ~45,000 ft target ceiling (balloon typically tops out ~50,000 ft)
+fill_volume_m3: null        # TBD; computed from total mass and ascent-rate target

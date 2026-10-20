@@ -1,0 +1,15 @@
+# Data and model artifacts live on Drive / local data dir, never in Git
+data/
+checkpoints/
+runs/
+*.zarr/
+*.nc
+*.grib2
+*.parquet
+.env
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/

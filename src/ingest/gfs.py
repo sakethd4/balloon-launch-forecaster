@@ -63,7 +63,16 @@ def output_path(day: date, cycle: int = 12, res: str = "0p50", out_dir: Path | N
     return out_dir / f"gfs_{res}_v{SCHEMA_VERSION}_{day:%Y%m%d}_t{cycle:02d}z.nc"
 
 
+# First day covered by this module. GFS v16 went live 2021-03-22; from that day the files
+# live under .../atmos/ and include instantaneous cloud cover. Earlier files (archive starts
+# 2021-01-01) use a different folder layout, come from an older model version with
+# different error behaviour, and have no instantaneous cloud cover, so we leave them out.
+FIRST_SUPPORTED_DAY = date(2021, 3, 22)
+
+
 def _url(day: date, cycle: int, step: int, res: str = "0p50") -> str:
+    if day < FIRST_SUPPORTED_DAY:
+        raise ValueError(f"{day}: before {FIRST_SUPPORTED_DAY} (GFS v16 and the current folder layout)")
     d = f"{day:%Y%m%d}"
     return f"{BUCKET}/gfs.{d}/{cycle:02d}/atmos/gfs.t{cycle:02d}z.pgrb2.{res}.f{step:03d}"
 
@@ -107,6 +116,10 @@ def _retry(fn, retries: int = 5):
 
 def _get_text(session: requests.Session, url: str) -> str:
     r = session.get(url, timeout=60)
+    if r.status_code == 404:
+        # Not a network problem: that file does not exist. Raised as a non-network error
+        # so `_retry` does not waste time retrying it.
+        raise FileNotFoundError(url)
     r.raise_for_status()
     return r.text
 

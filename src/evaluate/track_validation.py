@@ -21,7 +21,7 @@ import pandas as pd
 import xarray as xr
 
 from src.baselines.trajectory4d import WindField4D, drift_along_track
-from src.ingest import gfs, igra, sondehub
+from src.ingest import gfs, sondehub
 
 TOP_M = 13716.0
 SEASONS = {12: "DJF", 1: "DJF", 2: "DJF", 3: "MAM", 4: "MAM", 5: "MAM",
@@ -92,7 +92,10 @@ def evaluate_leg(field: WindField4D, leg: pd.DataFrame, init: pd.Timestamp, grou
     err_e, err_n = local_km(leg.lat.iloc[-1], leg.lon.iloc[-1], lat[-1], lon[-1])  # predicted minus actual
     drift = float(np.hypot(act_e, act_n))
     ux, uy = (act_e / drift, act_n / drift) if drift > 0.05 else (1.0, 0.0)
-    return dict(lead_h=start_lead, duration_min=elapsed[-1] / 60, drift_km=drift,
+    # Outside the forecast crop the simulator reuses the edge winds, so such legs are unreliable
+    # (flights from the eastern sites often drift out of the domain): flag them for filtering.
+    in_domain = bool(leg.lat.between(gfs.LAT_MIN, gfs.LAT_MAX).all() and leg.lon.between(gfs.LON_MIN, gfs.LON_MAX).all())
+    return dict(lead_h=start_lead, duration_min=elapsed[-1] / 60, drift_km=drift, in_domain=in_domain,
                 err_east_km=err_e, err_north_km=err_n, err_km=float(np.hypot(err_e, err_n)),
                 err_along_km=err_e * ux + err_n * uy, err_cross_km=-err_e * uy + err_n * ux,
                 start_alt_m=float(leg.alt_m.iloc[0]), end_alt_m=float(leg.alt_m.iloc[-1]))
@@ -114,7 +117,7 @@ def run(flights: pd.DataFrame, min_leads=(0.0, 24.0), gfs_dir=None):
             continue
         t = clean_flight(track)
         legs = {"ascent": ascent_leg(t), "descent": descent_leg(t)}
-        elev = igra.STATION_INFO[fl.station]["elev_m"]
+        elev = sondehub.station_elev_m(fl.station)
         # One forecast run per flight (both legs use it), chosen from the estimated launch time:
         # the moment of the highest frame minus the time a ~5.5 m/s climb needs to get there.
         peak = t.loc[t.alt_m.idxmax()]

@@ -33,6 +33,26 @@ _NS = "{http://s3.amazonaws.com/doc/2006-03-01/}"
 # National Weather Service stations near Austin (WMO ids, same stations as our soundings)
 STATION_WMO = {"FWD": "72249", "CRP": "72251", "DRT": "72261", "MAF": "72265"}
 
+# More launch sites inside (or at the edge of) our 27-35N, 103-92W forecast domain, found by
+# reading one summary from each of the archive's 550 launch-site folders. Together with the four
+# above they ring Austin. LCH and SHV are NWS stations (72240 Lake Charles, 72248 Shreveport).
+# CLL (folder -115, near College Station, iMet-4 sondes, 17 flights in 2026) and BPT (folder -12,
+# near Beaumont/Port Arthur, 2021-22) are not NWS stations; their names are guesses from the
+# coordinates. Others (Brownsville, Norman, Amarillo, Little Rock, Monterrey) are outside the
+# domain, so our GFS files cannot evaluate their flights.
+EXTRA_STATION_WMO = {"LCH": "72240", "SHV": "72248", "CLL": "-115", "BPT": "-12"}
+ALL_STATION_WMO = {**STATION_WMO, **EXTRA_STATION_WMO}
+# Approximate ground elevation (m) of the extra sites. Only used as an upper bound for the ground
+# level in the simulator (the lower of this and the track's lowest frame wins), so approximate is fine.
+EXTRA_STATION_ELEV_M = {"LCH": 5.0, "SHV": 85.0, "CLL": 100.0, "BPT": 5.0}
+
+
+def station_elev_m(station: str) -> float:
+    if station in EXTRA_STATION_ELEV_M:
+        return EXTRA_STATION_ELEV_M[station]
+    from src.ingest import igra
+    return float(igra.STATION_INFO[station]["elev_m"])
+
 
 def parse_summary_keys(keys: list[str]) -> pd.DataFrame:
     """From launchsites/<wmo>/YYYY/MM/DD/<serial>.json keys to one row per serial.
@@ -157,6 +177,39 @@ def compact_track(serial: str, raw_dir: Path | None = None, out_dir: Path | None
                         vel_h_ms=vals[:, 3], vel_v_ms=vals[:, 4])
     tmp.replace(dest)  # atomic
     return dest
+
+
+def remote_size_mb(serial: str, session: requests.Session) -> float | None:
+    """Compressed size of a track on the server (a HEAD request, no download); None if absent."""
+    r = session.head(f"{BASE}/serial/{serial}.json.gz", timeout=60)
+    if r.status_code in (403, 404):
+        return None
+    r.raise_for_status()
+    return int(r.headers["Content-Length"]) / 1e6
+
+
+def fetch_and_compact(serial: str, raw_dir: Path, out_dir: Path, max_gz_mb: float = 40.0,
+                      session: requests.Session | None = None) -> str:
+    """Download one track, keep only its compact form, delete the raw file. Returns a status:
+    "ok", "missing" (not in the archive), "too_big" (over `max_gz_mb` compressed; not downloaded)
+    or "empty" (no usable frames). Meant for machines where storing raw tracks is not an option.
+    """
+    if compact_path(serial, out_dir).exists():
+        return "ok"
+    s = session or requests.Session()
+    size = remote_size_mb(serial, s)
+    if size is None:
+        return "missing"
+    if size > max_gz_mb:
+        return "too_big"
+    try:
+        download_track(serial, raw_dir, s)
+    except FileNotFoundError:
+        return "missing"
+    try:
+        return "ok" if compact_track(serial, raw_dir, out_dir, max_gz_mb=max_gz_mb + 1) else "empty"
+    finally:
+        track_path(serial, raw_dir).unlink(missing_ok=True)
 
 
 def load_track(path: Path) -> pd.DataFrame:

@@ -23,7 +23,7 @@ from src.ingest import sondehub  # noqa: E402
 
 # Flights that have a compact track on disk (scripts.fetch_sondehub, then scripts.compact_tracks)
 have = {f.name[: -len(".npz")] for f in (PROCESSED_DIR / "sondehub_tracks").glob("*.npz")}
-flights = pd.concat([sondehub.list_flights(w).assign(station=s) for s, w in sondehub.STATION_WMO.items()],
+flights = pd.concat([sondehub.list_flights(w).assign(station=s) for s, w in sondehub.ALL_STATION_WMO.items()],
                     ignore_index=True)
 flights = flights[flights.serial.isin(have)]
 if args.limit:
@@ -36,6 +36,9 @@ out.mkdir(parents=True, exist_ok=True)
 res.to_csv(out / "track_validation.csv", index=False)
 print(f"{len(res)} leg evaluations from {res.serial.nunique()} flights; saved to {out / 'track_validation.csv'}")
 
+print(f"\n{(~res.in_domain).mean():.0%} of legs leave the forecast domain; they are dropped from the tables below.")
+print("Legs per station (in domain):", res[res.in_domain].groupby("station").size().to_dict())
+res = res[res.in_domain].copy()
 q90 = lambda x: x.quantile(0.9)
 res["lead_mode"] = res.min_lead_h.map({0.0: "lead ~11-23 h", 24.0: "lead ~35-47 h"})
 print("\nEND-POINT ERROR (km): predicted minus real position where each leg ends")

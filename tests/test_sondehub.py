@@ -66,3 +66,35 @@ def test_load_track_sorts_dedupes_and_drops_incomplete_frames(tmp_path):
     df = sondehub.load_track(path)
     assert list(df.alt_m) == [15000.0, 20000.0]          # sorted by time, duplicate and incomplete removed
     assert df.time.dt.tz is not None                     # timezone-aware UTC
+
+
+def _fake_server(monkeypatch, sizes, frames):
+    """Pretend the archive holds tracks of the given compressed sizes (MB); downloads write `frames`."""
+    monkeypatch.setattr(sondehub, "remote_size_mb", lambda serial, session: sizes.get(serial))
+
+    def fake_download(serial, out_dir=None, session=None):
+        dest = sondehub.track_path(serial, out_dir)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with gzip.open(dest, "wt", encoding="utf-8") as f:
+            json.dump(frames, f)
+        return dest
+
+    monkeypatch.setattr(sondehub, "download_track", fake_download)
+
+
+def test_fetch_and_compact_keeps_only_the_compact_file_and_reports_status(tmp_path, monkeypatch):
+    frames = [{"datetime": f"2024-05-01T12:00:{s:02d}.000000Z", "lat": 33.0, "lon": -96.5, "alt": 100.0 + s}
+              for s in range(0, 30, 10)]
+    _fake_server(monkeypatch, {"A": 1.0, "BIG": 90.0}, frames)
+    raw, out = tmp_path / "raw", tmp_path / "out"
+    assert sondehub.fetch_and_compact("A", raw, out, max_gz_mb=40) == "ok"
+    assert sondehub.compact_path("A", out).exists()
+    assert not sondehub.track_path("A", raw).exists()                      # raw deleted after compaction
+    assert sondehub.fetch_and_compact("BIG", raw, out, max_gz_mb=40) == "too_big"
+    assert not sondehub.track_path("BIG", raw).exists()                    # never downloaded
+    assert sondehub.fetch_and_compact("NOPE", raw, out, max_gz_mb=40) == "missing"
+
+
+def test_station_elevation_covers_every_station():
+    for station in sondehub.ALL_STATION_WMO:
+        assert sondehub.station_elev_m(station) >= 0

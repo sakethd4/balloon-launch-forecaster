@@ -21,10 +21,11 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import requests
 
-from src.paths import RAW_DIR
+from src.paths import PROCESSED_DIR, RAW_DIR
 
 BASE = "https://sondehub-history.s3.amazonaws.com"
 _NS = "{http://s3.amazonaws.com/doc/2006-03-01/}"
@@ -78,19 +79,20 @@ def download_track(serial: str, out_dir: Path | None = None, session: requests.S
     s = session or requests
     for attempt in range(4):
         try:
-            r = s.get(f"{BASE}/serial/{serial}.json.gz", timeout=60)
+            r = s.get(f"{BASE}/serial/{serial}.json.gz", timeout=300, stream=True)
             if r.status_code == 404 or r.status_code == 403:
                 raise FileNotFoundError(serial)  # not in the archive; do not retry
             r.raise_for_status()
+            # Keep the bytes exactly as sent (still compressed). The server marks these files
+            # as compressed, so by default the HTTP library would unpack them, and a recent
+            # track is ~10 MB sent but ~400 MB unpacked: slow, and it needs gigabytes of RAM.
+            data = r.raw.read(decode_content=False)
             break
         except requests.RequestException:
             if attempt == 3:
                 raise
-    data = r.content
     if not data.startswith(b"\x1f\x8b"):
-        # The server marks these files as compressed, so the HTTP library may already have
-        # unpacked them. Store every track the same way: gzip-compressed.
-        data = gzip.compress(data)
+        data = gzip.compress(data)  # safety net if the server ever sends plain JSON
     tmp = dest.with_suffix(".part")
     tmp.write_bytes(data)
     tmp.replace(dest)  # atomic: a crash never leaves a half-written file
@@ -111,12 +113,64 @@ def download_tracks(serials, workers: int = 16, out_dir: Path | None = None):
     return ok, missing
 
 
+def compact_path(serial: str, out_dir: Path | None = None) -> Path:
+    return (out_dir or PROCESSED_DIR / "sondehub_tracks") / f"{serial}.npz"
+
+
+def compact_track(serial: str, raw_dir: Path | None = None, out_dir: Path | None = None,
+                  max_gz_mb: float = 60.0) -> Path | None:
+    """Turn a raw track into a small file: one row per second, six columns (about 150 KB).
+
+    Recent raw tracks are huge because every receiver that heard a frame uploaded its own
+    copy (a 2025 track is ~400 MB of JSON for ~7,000 distinct frames). We keep one copy of each
+    frame. Files over `max_gz_mb` compressed are skipped (returns None): unpacking them could
+    need many GB of RAM. Already-converted tracks are returned as they are.
+    """
+    import orjson
+
+    dest = compact_path(serial, out_dir)
+    if dest.exists():
+        return dest
+    src = track_path(serial, raw_dir)
+    if src.stat().st_size > max_gz_mb * 1e6:
+        return None
+    raw = src.read_bytes()
+    if raw.startswith(b"\x1f\x8b"):
+        raw = gzip.decompress(raw)
+    frames = orjson.loads(raw)
+    del raw
+    nan = float("nan")
+    unique = {}
+    for f in frames:  # keep the first copy of each timestamp
+        k = f.get("datetime")
+        if k is not None and k not in unique and "lat" in f and "lon" in f and "alt" in f:
+            unique[k] = (f["lat"], f["lon"], f["alt"], f.get("vel_h", nan), f.get("vel_v", nan))
+    del frames
+    if not unique:
+        return None
+    t = pd.to_datetime(list(unique), utc=True)
+    order = np.argsort(t.asi8)
+    vals = np.array(list(unique.values()), dtype=float)[order]
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(".part.npz")
+    np.savez_compressed(tmp, time_ns=t.asi8[order], lat=vals[:, 0], lon=vals[:, 1], alt_m=vals[:, 2],
+                        vel_h_ms=vals[:, 3], vel_v_ms=vals[:, 4])
+    tmp.replace(dest)  # atomic
+    return dest
+
+
 def load_track(path: Path) -> pd.DataFrame:
     """One flight as a table sorted by time: time (UTC), lat, lon, alt_m, vel_h_ms, vel_v_ms.
 
-    Several receivers can hear the same frame, so duplicate timestamps are dropped.
-    Frames without a position or altitude are dropped.
+    Reads a compact `.npz` (see `compact_track`) or a raw `.json.gz`. Several receivers can
+    hear the same frame, so duplicate timestamps are dropped. Frames without a position or
+    altitude are dropped.
     """
+    if str(path).endswith(".npz"):
+        z = np.load(path)
+        df = pd.DataFrame({"time": pd.to_datetime(z["time_ns"], utc=True), "lat": z["lat"], "lon": z["lon"],
+                           "alt_m": z["alt_m"], "vel_h_ms": z["vel_h_ms"], "vel_v_ms": z["vel_v_ms"]})
+        return df.dropna(subset=["lat", "lon", "alt_m"]).reset_index(drop=True)
     raw = Path(path).read_bytes()
     if raw.startswith(b"\x1f\x8b"):  # gzip magic bytes (older downloads may be plain JSON)
         raw = gzip.decompress(raw)

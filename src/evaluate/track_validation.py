@@ -106,7 +106,7 @@ def run(flights: pd.DataFrame, min_leads=(0.0, 24.0), gfs_dir=None):
     """
     rows, cache_key, field = [], None, None
     for fl in flights.sort_values("date").itertuples():
-        path = sondehub.track_path(fl.serial)
+        path = sondehub.compact_path(fl.serial)  # made by scripts.compact_tracks
         if not path.exists():
             continue
         track = sondehub.load_track(path)

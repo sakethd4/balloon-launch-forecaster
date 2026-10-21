@@ -19,8 +19,13 @@ p.add_argument("--limit", type=int, default=None, help="only the first N flights
 args = p.parse_args()
 pd.set_option("display.width", 160)
 
-flights = pd.read_csv(PROCESSED_DIR / "sondehub_flights.csv", parse_dates=["date"])
-flights = flights[flights.downloaded]
+from src.ingest import sondehub  # noqa: E402
+
+# Flights that have a compact track on disk (scripts.fetch_sondehub, then scripts.compact_tracks)
+have = {f.name[: -len(".npz")] for f in (PROCESSED_DIR / "sondehub_tracks").glob("*.npz")}
+flights = pd.concat([sondehub.list_flights(w).assign(station=s) for s, w in sondehub.STATION_WMO.items()],
+                    ignore_index=True)
+flights = flights[flights.serial.isin(have)]
 if args.limit:
     flights = flights.sort_values("date").head(args.limit)
 print(f"{len(flights)} flights", flush=True)

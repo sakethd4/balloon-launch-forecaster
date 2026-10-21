@@ -4,9 +4,9 @@
 
 **Launch Planner**: a probabilistic flight simulator and web app for a university club's weather balloon (Austin, TX). A 4D physics simulator flies the balloon through real NOAA GFS forecasts; an ML layer learns how forecast winds err so the app can show a calibrated distribution of plausible flights, not one line; a decision layer ranks launch sites and hours. Club-facing description: [PROJECT.md](PROJECT.md). Read it before design decisions. The user wants **ML at the core, applied uniquely** (not a wrapper around GFS) and a clean interactive app. It is a learning project, so prefer clear, well-explained code.
 
-## Status (2026-10-20)
+## Status (2026-10-21)
 
-Done: data pipeline (GFS forecasts, IGRA soundings), 1D and 4D simulators, forecast-vs-sounding evaluation, bias-correction baseline, 21 passing tests, private repo https://github.com/sakethd4/balloon-launch-forecaster (branch `main`).
+Done: data pipeline (GFS forecasts, IGRA soundings), 1D and 4D simulators, forecast-vs-sounding evaluation, bias-correction baseline, SondeHub real-track validation, GEFS spread test, 36 passing tests, private repo https://github.com/sakethd4/balloon-launch-forecaster (branch `main`).
 
 Order of work agreed with the user: (1) validate the simulator against real flight tracks (SondeHub); (2) test cheap uncertainty ideas: landing-error shape (ellipse vs ring) and GEFS ensemble spread as a predictor; (3) build the learned wind-error model and push samples through the simulator; (4) decision layer and the web app (a first app version can come earlier). Hosting/sharing for the app is undecided (local, private link, or public) and so is live vs fixed-day forecasts; default is hosting-agnostic static site, fixed days first.
 
@@ -26,7 +26,8 @@ All from `scripts.compare_gfs_sondes` over 2021-03-22 to 2026-10-18: 2,037 GFS 1
 - Bias correction (mean error by station/season/lead/level, train 2021-2024, test 2025-2026, 24,134 flights; `scripts.bias_baseline`): wind RMSE improves 0.3 to 1.6%; mean 300 hPa error ~0.7 m/s vs ~7.5 m/s RMSE, so error is mostly random (in-sample gain only 1.2%, so not a bug). Landing median improves 3.8->3.5 km (24 h, -7.9%), 7.9->7.5 (72 h, -5.1%), 12.7->12.5 (120 h, -1.6%), improving 56 to 65% of flights. Per-station and pooled versions are nearly identical.
 - 4D vs frozen-profile simulator from Austin at 13Z: differ ~0.5 km mean / 1.8 km max (September, drift ~20 km) and ~1.5 km mean / 4.8 km max (January, drift ~77 km), about the size of the forecast error at 1 to 2 days. ~70 ms per flight in Python.
 - Predictability of error SIZE (gradient boosting on log landing error, same time split): R2 0.35 with lead time alone, 0.37 + month, 0.39 + drift distance. Predicted error tracks actual across 5 buckets (2.5 to 11.3 km predicted; actual median 2.5 to 12.6, p90 5.8 to 26.3), mostly via lead time.
-- Not yet tested: error DIRECTION/shape (saved flights CSV has only distances; recompute vector errors), GEFS spread, real tracks.
+- **Real tracks (SondeHub, `scripts.validate_tracks`)**: 1,764 flights, 6,078 legs, mostly FWD 2024-2025 (the archive's usable yield by year: 2022 ~5%, 2023 ~54%, 2024 ~97%). Simulator driven by the real altitude history through one 12Z GFS run: median end-point error 3.4 km (p90 9.2) on the climb at forecast age 11-23 h, 5.2 km (12.1) at 35-47 h; descent 1.9 (5.9) and 3.2 (8.6) km. Matches the sounding-based baseline (3.8 km at 24 h), so the simulator and its physics are sound. **Error shape is round, not an ellipse**: RMS along vs across the drift 4.0 vs 4.3 km (climb, 11-23 h), plus a small systematic under-drift (-1.2 km along track). By season (climb): DJF 3.4, MAM 4.8, JJA 3.3, SON 2.7 km. Caveats: NWS balloons are bigger than ours; leads are bands, not exact; these numbers included legs that left the forecast domain (edge winds reused), later runs flag them (`in_domain`). 17 iMet-4 flights near College Station (site -115, 2026) showed a large climb error (median 13 km, 11 flights, winter): too few to read, recheck with more data.
+- **GEFS spread (`scripts.spread_test`, test 2025-2026, 24,134 rows)**: spread helps. R2 of log landing error: lead only 0.346; + month 0.371; + month + GFS wind speed (control) 0.397; + month + spread 0.446; + month + GFS wind + spread 0.459. Within a lead, Spearman(spread, log error) is 0.32-0.42 (GFS wind 0.20-0.45). Buckets of predicted error get slightly sharper (lowest bucket p90 5.1 vs 6.4 km, highest median 13.6 vs 12.6 km) with medians still matching. Use spread as a feature of the learned error model. Not yet tested: spread along the flight path instead of at the station, direction of error, spread on real tracks.
 
 ## ML direction
 
@@ -50,15 +51,19 @@ GFS + IGRA ingest -> ~/balloon-data/{raw,processed} -> 4D simulator (src/baselin
 ```
 configs/balloon.yaml            balloon parameters
 notebooks/01_colab_gfs_download.ipynb   Colab launcher for big GFS downloads
-scripts/                        fetch_gfs, download_igra, compare_gfs_sondes, bias_baseline, make_colab_bundle
+scripts/                        fetch_gfs, download_igra, compare_gfs_sondes, bias_baseline, make_colab_bundle,
+                                fetch_sondehub(_compact), compact_tracks, import_sondehub_batches, validate_tracks,
+                                fetch_gefs, spread_test
 src/paths.py                    data locations
-src/ingest/                     gfs.py (AWS GFS, byte-range, ecCodes), igra.py (soundings)
+src/ingest/                     gfs.py (AWS GFS, byte-range, ecCodes), igra.py (soundings), sondehub.py (real tracks,
+                                compact npz), gefs.py (ensemble spread)
+src/evaluate/track_validation.py  simulator vs real tracks
 src/baselines/                  trajectory.py (1D), trajectory4d.py (4D, WindField4D)
 src/evaluate/gfs_vs_sondes.py   forecast-vs-sounding comparison and landing error
 src/models/bias_correction.py   cheap baseline
-tests/                          21 tests (pytest)
+tests/                          36 tests (pytest)
 ```
-Planned: `src/uncertainty/` (learned layer), SondeHub ingest, `web/` (app).
+Planned: `src/uncertainty/` (learned layer), `web/` (app).
 
 ## Conventions
 
@@ -95,12 +100,12 @@ From the project root `C:\Users\saket\OneDrive\Documents\tsl larp`, env `balloon
 - Colab bulk runs: ~20 to 29 s per day per process; two processes ran ~1.4x faster than one. Colab writes to Drive through a cache, so **the notebook check cell can see files that never reached Drive**; always `drive.flush_and_unmount()` then remount before trusting a count. Drive web folder downloads were unreliable (zips of ~1.9 GB plus tiny leftovers); verify counts after extracting and flatten the nested `gfs` folder.
 - **IGRA soundings** (`src/ingest/igra.py`): full history for FWD `USM00072249`, CRP `USM00072251`, DRT `USM00072261`, MAF `USM00072265` in `~/balloon-data/raw/igra/` (CRC-checked). Fixed-width format parsed from NOAA's spec; missing = -9999/-8888; wind speed tenths of m/s, temperature tenths of °C, pressure Pa. `parse(..., start, end)` skips other years quickly. Austin has no sounding station.
 - Eval outputs in `~/balloon-data/processed/eval/`: `gfs_vs_sondes_levels.csv` (per level, 70 MB), `gfs_vs_sondes_flights.csv`, `bias_baseline_flights.csv`.
-- **Possible data:** GEFS ensemble (uncertainty predictor); ERA5 for winds over Austin itself and climatology (CDS API with a user-created token in `~/.cdsapirc` and the dataset licence accepted, with area subsetting; the ARCO-ERA5 Google Cloud copy has global hourly chunks, ~154 MB per variable, so regional pulls are heavy; ERA5 assimilates the same soundings, so it is a cross-check, not independent truth, and cannot be a forecast input); HRRR analyses and AMDAR aircraft winds (access and archive dates unchecked); the club's own flights.
+- **GEFS spread:** `~/balloon-data/processed/gefs/` one NetCDF per day (2,037 days, 178 MB): u/v/vector spread at 500/300/200 hPa for leads 0,12,24,36,48,72,96,120 h, from NOAA's `gespr` files on `noaa-gefs-pds` (about 3 s per day). **Possible data:** ERA5 for winds over Austin itself and climatology (CDS API with a user-created token in `~/.cdsapirc` and the dataset licence accepted, with area subsetting; the ARCO-ERA5 Google Cloud copy has global hourly chunks, ~154 MB per variable, so regional pulls are heavy; ERA5 assimilates the same soundings, so it is a cross-check, not independent truth, and cannot be a forecast input); HRRR analyses and AMDAR aircraft winds (access and archive dates unchecked); the club's own flights.
 
 ## Open questions
 
 - App hosting/sharing and live vs fixed-day forecasts.
 - Grid spacing and extent of candidate launch points; the format of the club's allowed-area data (GeoJSON/KML?).
 - Fill volume (compute from total mass and the ascent-rate target); any past club flight logs.
-- Whether SondeHub's archive covers enough tracks near Austin (and amateur flights); dates of GFS updates after v16.
+- SondeHub has no launch site in Austin. In-domain sites: FWD, CRP, DRT, MAF plus LCH 72240, SHV 72248, CLL (folder -115, College Station, iMet-4, 17 flights 2026) and BPT (folder -12, Beaumont area, 2021-22); the names of the last two are guesses from coordinates. Out-of-domain sites (BRO, OUN, AMA, LZK, Monterrey) cannot be evaluated with the Texas GFS crop. Amateur flights without a launch-site label were not searched (would need scanning the date/ view). `notebooks/02_colab_sondehub_download.ipynb` fetches ~15,000 more flights as compact zips (pending: user runs it, then `scripts.import_sondehub_batches`). Also open: dates of GFS updates after v16, Austin-area ground truth (club flights with a GPS tracker; AMDAR aircraft winds unchecked).
 - Whether to move the dataset to the 1 TB account.

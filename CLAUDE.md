@@ -6,7 +6,7 @@
 
 ## Status (2026-10-21)
 
-Done: data pipeline (GFS forecasts, IGRA soundings), 1D and 4D simulators, forecast-vs-sounding evaluation, bias-correction baseline, SondeHub real-track validation, GEFS spread test, 36 passing tests, private repo https://github.com/sakethd4/balloon-launch-forecaster (branch `main`).
+Done: data pipeline (GFS forecasts, IGRA soundings), 1D and 4D simulators, forecast-vs-sounding evaluation, bias-correction baseline, SondeHub real-track validation, GEFS spread test, first learned wind-error model, 38 passing tests, private repo https://github.com/sakethd4/balloon-launch-forecaster (branch `main`).
 
 Order of work agreed with the user: (1) validate the simulator against real flight tracks (SondeHub); (2) test cheap uncertainty ideas: landing-error shape (ellipse vs ring) and GEFS ensemble spread as a predictor; (3) build the learned wind-error model and push samples through the simulator; (4) decision layer and the web app (a first app version can come earlier). Hosting/sharing for the app is undecided (local, private link, or public) and so is live vs fixed-day forecasts; default is hosting-agnostic static site, fixed days first.
 
@@ -28,6 +28,7 @@ All from `scripts.compare_gfs_sondes` over 2021-03-22 to 2026-10-18: 2,037 GFS 1
 - Predictability of error SIZE (gradient boosting on log landing error, same time split): R2 0.35 with lead time alone, 0.37 + month, 0.39 + drift distance. Predicted error tracks actual across 5 buckets (2.5 to 11.3 km predicted; actual median 2.5 to 12.6, p90 5.8 to 26.3), mostly via lead time.
 - **Real tracks (SondeHub, `scripts.validate_tracks`)**: 19,473 compact tracks from 8 sites ringing Austin (FWD, CRP, DRT, MAF, LCH, SHV, CLL, BPT) gave 42,158 legs from 12,843 flights; 6% of legs leave the forecast domain and are dropped (`in_domain`). Simulator driven by the real altitude history through one 12Z GFS run. Median end-point error: climb 2.6 km (p90 7.0) at forecast age 11-23 h, 4.3 (9.9) at 35-47 h; descent 1.5 (4.8) and 2.4 (7.4) km. Consistent with the sounding-based baseline, so the simulator and its physics are sound. **Error shape is round, not an ellipse**: RMS along vs across the drift 3.2 vs 3.2 km (climb, 11-23 h), with a small systematic under-drift (-1.1 km along track). By season (climb): DJF 2.8, MAM 3.1, JJA 2.4, SON 2.3 km. **By station (climb, 11-23 h): FWD 4.2 km (n 2,367) is clearly worse than CRP 2.5, LCH 2.4, MAF 2.4, SHV 2.2, BPT 2.1**; the earlier all-FWD number (3.4) overstated the typical error. DRT yields almost no climbs (1 of 3,244 flights; tracks start above 3 km, remote receivers) but 532 descents. CLL (17 iMet-4 flights, 2026): climb 13.0 km on 11 flights, too few to read. Caveats: NWS balloons are bigger than ours; leads are bands, not exact; flights are not from Austin; per-station differences may be partly weather regime, not the simulator.
 - **GEFS spread (`scripts.spread_test`, test 2025-2026, 24,134 rows)**: spread helps. R2 of log landing error: lead only 0.346; + month 0.371; + month + GFS wind speed (control) 0.397; + month + spread 0.446; + month + GFS wind + spread 0.459. Within a lead, Spearman(spread, log error) is 0.32-0.42 (GFS wind 0.20-0.45). Buckets of predicted error get slightly sharper (lowest bucket p90 5.1 vs 6.4 km, highest median 13.6 vs 12.6 km) with medians still matching. Use spread as a feature of the learned error model. Not yet tested: spread along the flight path instead of at the station, direction of error, spread on real tracks.
+- **Learned wind-error model v1 (`scripts.wind_error_model`, `src/uncertainty/wind_error.py`)**: generates error profiles (u,v at 850-150 hPa) = GBM-predicted scale per output x a bank of standardized training profiles (leave-one-year-out scales, same-lead bank, zero mean). Trained 2021-2024 on 55,320 sounding profiles, tested 2025-2026 on 23,349, 100 samples per profile, scored on the landing displacement via a linear shortcut (error profile weighted by time spent aloft; vs the simulator's landing error: correlation 0.965, shortcut median 6.56 km vs 6.07 km, so ~8% high). **Calibrated**: coverage of the 50%/90% radii is 49.7%/89.7% (full), 49.9/89.4 (lead only baseline), 50.9/90.0 (lead+month); by lead 88-91%, by station 89-90%, winter slightly low (DJF 87%). **Sharper only modestly**: energy score 6.07 km (full) vs 6.19 (lead only) = -1.9%; mean 90% radius 15.0 vs 15.8 km (-5%). Predicted-size buckets match actual (bucket p90 6.0/9.6/14.0/18.9/28.2 km vs predicted r90 6.2/9.5/13.5/18.1/25.5; highest bucket slightly under-dispersed, 89% coverage). Honest read: lead-time statistics already give a calibrated zone; spread and GFS wind buy a small sharpening. Not yet done: samples through the 4D simulator, check against SondeHub end points, spatial/temporal correlation of error (the model has none: one column error for the whole flight), station-specific (FWD) effects, non-zero mean/direction.
 
 ## ML direction
 
@@ -53,7 +54,7 @@ configs/balloon.yaml            balloon parameters
 notebooks/01_colab_gfs_download.ipynb   Colab launcher for big GFS downloads
 scripts/                        fetch_gfs, download_igra, compare_gfs_sondes, bias_baseline, make_colab_bundle,
                                 fetch_sondehub(_compact), compact_tracks, import_sondehub_batches, validate_tracks,
-                                fetch_gefs, spread_test
+                                fetch_gefs, spread_test, wind_error_model
 src/paths.py                    data locations
 src/ingest/                     gfs.py (AWS GFS, byte-range, ecCodes), igra.py (soundings), sondehub.py (real tracks,
                                 compact npz), gefs.py (ensemble spread)
@@ -61,9 +62,10 @@ src/evaluate/track_validation.py  simulator vs real tracks
 src/baselines/                  trajectory.py (1D), trajectory4d.py (4D, WindField4D)
 src/evaluate/gfs_vs_sondes.py   forecast-vs-sounding comparison and landing error
 src/models/bias_correction.py   cheap baseline
-tests/                          36 tests (pytest)
+src/uncertainty/wind_error.py   learned wind-error generator (scale GBMs + bank of standardized error profiles)
+tests/                          38 tests (pytest)
 ```
-Planned: `src/uncertainty/` (learned layer), `web/` (app).
+Planned: sampling through the 4D simulator, real-track calibration of the generator, `web/` (app).
 
 ## Conventions
 

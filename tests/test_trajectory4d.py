@@ -62,6 +62,22 @@ def test_wind_that_depends_on_latitude():
     assert windy.landing[1] - (-97.5) == pytest.approx(expected, rel=0.01)
 
 
+def test_drift_along_a_prescribed_altitude_path():
+    from src.baselines.trajectory4d import drift_along_track
+    # wind grows with altitude (0.002 m/s per m); altitude climbs 150 m -> 150 + 6*T, which
+    # stays inside the field (its top level is 16 km; above that the edge wind is held)
+    field = make_field(lambda t, g, y, x: 0.002 * g)
+    T = 2000.0
+    elapsed = np.linspace(0, T, 7)
+    alt = GROUND + 6.0 * elapsed
+    lat, lon = drift_along_track(field, 30.0, -97.5, 6.0, elapsed, alt, ground_m=GROUND)
+    east_m = 0.002 * (GROUND * T + 3.0 * T * T)  # integral of 0.002 * (150 + 6 t) dt
+    expected = np.degrees(east_m / (6_371_000.0 * np.cos(np.radians(30.0))))
+    assert lat[-1] == pytest.approx(30.0, abs=1e-9)
+    assert lon[-1] - (-97.5) == pytest.approx(expected, rel=0.01)
+    assert len(lat) == len(elapsed) and lon[0] == -97.5
+
+
 def test_flight_outside_the_grid_is_flagged():
     field = make_field(lambda t, g, y, x: 10.0 + 0 * g)
     f = simulate_flight_4d(field, 33.5, -97.5, 6.0, ground_m=GROUND)

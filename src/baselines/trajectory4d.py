@@ -90,6 +90,40 @@ class WindField4D:
         return float(np.interp(alt_m, alts, us)), float(np.interp(alt_m, alts, vs))
 
 
+def _move(lat, lon, u, v, secs):
+    """Move a point by wind (u east, v north, m/s) for `secs` seconds."""
+    return (lat + np.degrees(v * secs / EARTH_RADIUS_M),
+            lon + np.degrees(u * secs / (EARTH_RADIUS_M * np.cos(np.radians(lat)))))
+
+
+def drift_along_track(field: WindField4D, start_lat: float, start_lon: float, start_lead_h: float,
+                      elapsed_s, alt_m, ground_m: float = 0.0, max_step_s: float = 15.0):
+    """Carry a balloon horizontally through the forecast along a PRESCRIBED altitude history.
+
+    Used to check the winds against real flights: the real balloon's altitude at each moment is
+    given, so any difference between the predicted and real positions comes from the winds and
+    the physics, not from guessing the climb rate. `elapsed_s` is seconds since the start
+    (increasing, first value 0) and `alt_m` the altitude at those moments. Returns the predicted
+    (lat, lon) arrays at the same moments. Same midpoint (RK2) stepping as simulate_flight_4d.
+    """
+    elapsed_s, alt_m = np.asarray(elapsed_s, dtype=float), np.asarray(alt_m, dtype=float)
+    lat, lon = start_lat, start_lon
+    out_lat, out_lon = [lat], [lon]
+    for k in range(1, len(elapsed_s)):
+        t0, t1, a0, a1 = elapsed_s[k - 1], elapsed_s[k], alt_m[k - 1], alt_m[k]
+        n = max(1, int(np.ceil((t1 - t0) / max_step_s)))
+        dt = (t1 - t0) / n
+        for j in range(n):
+            t_h = start_lead_h + (t0 + j * dt) / 3600.0
+            u1, v1 = field.wind_at(lat, lon, a0 + (a1 - a0) * j / n, t_h, ground_m)
+            mlat, mlon = _move(lat, lon, u1, v1, dt / 2)
+            u2, v2 = field.wind_at(mlat, mlon, a0 + (a1 - a0) * (j + 0.5) / n, t_h + dt / 7200.0, ground_m)
+            lat, lon = _move(lat, lon, u2, v2, dt)
+        out_lat.append(lat)
+        out_lon.append(lon)
+    return np.array(out_lat), np.array(out_lon)
+
+
 def simulate_flight_4d(field: WindField4D, launch_lat_deg: float, launch_lon_deg: float,
                        launch_lead_h: float, ascent_rate_ms: float = 5.833,
                        descent_rate_ms: float = 15.0, burst_altitude_m: float = 13716.0,
@@ -105,10 +139,7 @@ def simulate_flight_4d(field: WindField4D, launch_lat_deg: float, launch_lon_deg
     ts, lats, lons, alts = [t], [lat], [lon], [alt]
     burst_index = None
     notes = set()
-
-    def move(lat, lon, u, v, secs):
-        return (lat + np.degrees(v * secs / EARTH_RADIUS_M),
-                lon + np.degrees(u * secs / (EARTH_RADIUS_M * np.cos(np.radians(lat)))))
+    move = _move
 
     while True:
         ascending = burst_index is None

@@ -153,7 +153,7 @@ def compact_track(serial: str, raw_dir: Path | None = None, out_dir: Path | None
     vals = np.array(list(unique.values()), dtype=float)[order]
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(".part.npz")
-    np.savez_compressed(tmp, time_ns=t.asi8[order], lat=vals[:, 0], lon=vals[:, 1], alt_m=vals[:, 2],
+    np.savez_compressed(tmp, time_ns=t.as_unit("ns").asi8[order], lat=vals[:, 0], lon=vals[:, 1], alt_m=vals[:, 2],
                         vel_h_ms=vals[:, 3], vel_v_ms=vals[:, 4])
     tmp.replace(dest)  # atomic
     return dest

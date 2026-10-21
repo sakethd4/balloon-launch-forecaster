@@ -35,6 +35,7 @@ def test_compact_track_keeps_one_copy_of_each_frame_and_roundtrips(tmp_path):
     df = sondehub.load_track(path)
     assert list(df.alt_m) == [100.0, 110.0, 120.0, 130.0]    # 4 distinct frames, in time order
     assert df.time.dt.tz is not None
+    assert df.time.iloc[0] == pd.Timestamp("2024-05-01T12:00:00Z")   # right unit, not 1970
     assert sondehub.compact_track("S9", raw_dir=raw_dir, out_dir=out_dir) == path   # rerun is a no-op
 
 

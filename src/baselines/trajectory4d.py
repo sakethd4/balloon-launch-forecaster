@@ -33,7 +33,11 @@ class WindField4D:
     """Gridded wind forecast. Arrays are indexed [time, level, lat, lon] (u, v, gh) and
     [time, lat, lon] (u10, v10). Latitude and longitude must be ascending."""
 
-    def __init__(self, lead_h, lat, lon, gh_m, u, v, u10, v10, levels_hpa=None):
+    def __init__(self, lead_h, lat, lon, gh_m, u, v, u10, v10, levels_hpa=None, temp_k=None, rh_pct=None):
+        # temp_k and rh_pct (same [time, level, lat, lon] layout) are optional: only the web viewer's wind colours and
+        # clouds use them; the simulators ignore them.
+        self.temp_k = None if temp_k is None else np.asarray(temp_k, dtype=float)
+        self.rh_pct = None if rh_pct is None else np.asarray(rh_pct, dtype=float)
         self.levels_hpa = None if levels_hpa is None else np.asarray(levels_hpa, dtype=float)
         self.lead_h = np.asarray(lead_h, dtype=float)
         self.lat = np.asarray(lat, dtype=float)
@@ -54,7 +58,9 @@ class WindField4D:
                    ds.v.transpose("lead_h", "isobaricInhPa", "latitude", "longitude").values,
                    ds.u10.transpose("lead_h", "latitude", "longitude").values,
                    ds.v10.transpose("lead_h", "latitude", "longitude").values,
-                   levels_hpa=ds.isobaricInhPa.values)
+                   levels_hpa=ds.isobaricInhPa.values,
+                   temp_k=ds.t.transpose("lead_h", "isobaricInhPa", "latitude", "longitude").values,
+                   rh_pct=ds.r.transpose("lead_h", "isobaricInhPa", "latitude", "longitude").values)
 
     def with_column_error(self, levels_hpa, du, dv):
         """A copy whose winds are shifted by one wind-error PROFILE, the same at every place and time.
@@ -74,7 +80,7 @@ class WindField4D:
         ground_u, ground_v = float(np.asarray(du, dtype=float)[order][-1]), float(np.asarray(dv, dtype=float)[order][-1])
         return WindField4D(self.lead_h, self.lat, self.lon, self.gh, self.u + eu[None, :, None, None],
                            self.v + ev[None, :, None, None], self.u10 + ground_u, self.v10 + ground_v,
-                           levels_hpa=self.levels_hpa)
+                           levels_hpa=self.levels_hpa, temp_k=self.temp_k, rh_pct=self.rh_pct)
 
     @staticmethod
     def _weights(axis, x):

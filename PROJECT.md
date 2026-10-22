@@ -132,3 +132,10 @@ performance work removes repeated allocations, paused geometry updates and exces
 reductions are opt-in. Cloud shapes are illustrative within forecast humidity, and camera clearance depends on loaded
 terrain. Browser visual checks and laptop GPU measurements are pending; implementation and verification details are in
 web/README.md and CLAUDE.md.
+
+
+Viewer follow-up: the balloon uses fixed illustrative magnification so it is readable in Chase while retaining normal
+perspective. Wind is now soft curved ribbons, with no expanding coloured haze or rain-like vertical tails. Cloud shapes
+vary irregularly and evolve. Wide map views fade out wind (10-22 km) and clouds (28-50 km), then skip their processing.
+Performance work also reuses stationary cloud frames briefly and avoids unchanged projection updates. Nine viewer
+logic/Three.js integration checks pass; GPU visual verification remains pending. See web/README.md for details.

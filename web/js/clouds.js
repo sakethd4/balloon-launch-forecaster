@@ -3,7 +3,9 @@
 // atmosphere for every pixel (at reduced resolution, then scaled up). The forecast gives humidity on a coarse grid; the
 // fine structure of the clouds is generated, so their exact shapes are illustrative, but where and how thick they are follows the data.
 import * as THREE from "three";
-import { EARTH_R, clamp, mulberry32, rad } from "./util.js";
+import { clamp, mulberry32, rad } from "./util.js";
+
+import { cloudFade } from "./view-scale.js";
 
 const params = new URLSearchParams(location.search);
 const SCALE = Number(params.get("clouds")) || 0.5;          // render resolution of the cloud pass relative to the screen
@@ -48,10 +50,10 @@ function noiseTexture(size = 64) {
 
 const FRAG = `
 precision highp float; precision highp sampler3D;
-uniform sampler3D uRH, uNoise;
+uniform sampler3D uRH, uNoise, uWeather;
 uniform vec3 uCam, uRight, uUp, uDir, uSun, uSunCol, uAmbTop, uAmbBot;
 uniform vec2 uGridMin, uGridSpan, uRes;
-uniform float uTanY, uAspect, uTime, uZMax, uGround, uHMin, uHMax, uCover, uDensity;
+uniform float uTanY, uAspect, uTime, uZMax, uGround, uHMin, uHMax, uCover, uDensity, uOpacity;
 varying vec2 vUv;
 const float R_EARTH = 6371000.0;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -67,7 +69,15 @@ float density(vec3 p, float h, bool detail) {
   float base = coverage(p, h);
   if (base <= 0.0) return 0.0;
   vec3 q = (p + vec3(uTime * 7.0, uTime * 3.0, 0.0)) * vec3(1.0, 1.0, 2.0);
+  // A separate non-repeating volume spans the entire forecast domain. Two fields morph slowly.
+  vec3 weatherUV = vec3((p.xy - uGridMin + vec2(uTime * 7.0, uTime * 3.0)) / uGridSpan, h / uZMax * 0.4);
+  vec2 fields = texture(uWeather, weatherUV).rg;
+  float weather = mix(fields.r, fields.g, 0.5 + 0.5 * sin(uTime * 0.008));
+  q += vec3(weather * 7200.0, weather * -5300.0, weather * 1800.0);
   vec2 n1 = texture(uNoise, q / 11000.0).rg;
+  vec3 rotated = vec3(q.x * 0.8 + q.y * 0.6, q.y * 0.8 - q.x * 0.6, q.z);
+  n1 = mix(n1, texture(uNoise, rotated / 17321.0 + vec3(0.31, 0.67, uTime * 0.0009)).rg, 0.45);
+  base *= smoothstep(0.2, 0.7, weather);
   // Humidity controls the fraction occupied by billows instead of making a uniform sheet.
   float shape = n1.r * 0.7 + n1.g * 0.3;
   float d = (shape - (0.72 - base * 0.5)) / 0.4;
@@ -136,7 +146,7 @@ void main() {
     t += dt;
   }
   col = (1.0 - exp(-col / max(1.0 - T, 0.001) * 1.15)) * (1.0 - T);                                // soft tone map
-  gl_FragColor = vec4(col, 1.0 - T);                           // premultiplied
+  gl_FragColor = vec4(col, 1.0 - T) * uOpacity;                           // premultiplied
 }`;
 
 export function createClouds(S) {
@@ -144,10 +154,10 @@ export function createClouds(S) {
   const quadGeo = new THREE.PlaneGeometry(2, 2);
   const mat = new THREE.ShaderMaterial({
     glslVersion: null, depthTest: false, depthWrite: false,
-    uniforms: { uRH: { value: null }, uNoise: { value: null }, uCam: { value: new THREE.Vector3() }, uRight: { value: new THREE.Vector3() }, uUp: { value: new THREE.Vector3() },
+    uniforms: { uRH: { value: null }, uNoise: { value: null }, uWeather: { value: null }, uCam: { value: new THREE.Vector3() }, uRight: { value: new THREE.Vector3() }, uUp: { value: new THREE.Vector3() },
       uDir: { value: new THREE.Vector3() }, uSun: { value: new THREE.Vector3(0, 0, 1) }, uSunCol: { value: new THREE.Color(1, 1, 1) }, uAmbTop: { value: new THREE.Color() }, uAmbBot: { value: new THREE.Color() },
       uGridMin: { value: new THREE.Vector2() }, uGridSpan: { value: new THREE.Vector2() }, uRes: { value: new THREE.Vector2() }, uTanY: { value: 0.6 }, uAspect: { value: 1.6 }, uTime: { value: 0 },
-      uDensity: { value: 1 }, uZMax: { value: 14000 }, uGround: { value: 150 }, uHMin: { value: 600 }, uHMax: { value: 13200 }, uCover: { value: 0 } },
+      uOpacity: { value: 1 }, uDensity: { value: 1 }, uZMax: { value: 14000 }, uGround: { value: 150 }, uHMin: { value: 600 }, uHMax: { value: 13200 }, uCover: { value: 0 } },
     vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
     fragmentShader: FRAG,
   });
@@ -162,13 +172,34 @@ export function createClouds(S) {
   comp.frustumCulled = false; comp.renderOrder = -10; comp.visible = false;
   O.scene.add(comp);
   mat.uniforms.uNoise.value = noiseTexture(64);
-  const st = { rhTex: null, vis: true, ready: false };
+  // Cache non-repeating weather randomness once for inexpensive ray/light sampling.
+  const weatherSize = 24, weatherData = new Uint8Array(weatherSize ** 3 * 4), random = mulberry32(98421);
+  for (let i = 0; i < weatherData.length; i++) weatherData[i] = Math.round(random() * 255);
+  const weatherTex = new THREE.Data3DTexture(weatherData, weatherSize, weatherSize, weatherSize);
+  weatherTex.format = THREE.RGBAFormat; weatherTex.type = THREE.UnsignedByteType;
+  weatherTex.minFilter = weatherTex.magFilter = THREE.LinearFilter;
+  weatherTex.wrapS = weatherTex.wrapT = weatherTex.wrapR = THREE.ClampToEdgeWrapping;
+  weatherTex.unpackAlignment = 1; weatherTex.needsUpdate = true;
+  mat.uniforms.uWeather.value = weatherTex;
+  const st = { rhTex: null, vis: true, ready: false, lastRender: -Infinity,
+    camera: new THREE.Vector3(Infinity, 0, 0), dir: new THREE.Vector3(), up: new THREE.Vector3(), fov: 0, mode: null };
 
   O.frameHooks.push(() => {
-    comp.visible = st.vis && st.ready && !!S.data;
+    const fade = S.data && S.enu ? cloudFade(S.cam, O.camEnu.distanceTo(S.enu)) : 0;
+    comp.visible = st.vis && st.ready && !!S.data && fade > 0;
+    mat.uniforms.uOpacity.value = fade;
     if (!comp.visible) return;
     const dom = renderer.domElement, sc = SCALE * (0.55 + 0.45 * S.quality), w = Math.max(2, Math.round(dom.width * sc)), h = Math.max(2, Math.round(dom.height * sc));
-    if (rt.width !== w || rt.height !== h) rt.setSize(w, h);
+    const resized = rt.width !== w || rt.height !== h;
+    if (resized) rt.setSize(w, h);
+    const now = performance.now();
+    const stable = st.camera.distanceToSquared(O.camEnu) < 0.0001
+      && st.dir.distanceToSquared(O.camBasis.dir) < 1e-12 && st.up.distanceToSquared(O.camBasis.up) < 1e-12
+      && st.fov === O.camera.fov && st.mode === S.cam;
+    // Reuse a stationary view for at most 33 ms; camera movement always renders immediately.
+    if (!resized && stable && now - st.lastRender < 33) return;
+    st.lastRender = now; st.camera.copy(O.camEnu); st.dir.copy(O.camBasis.dir); st.up.copy(O.camBasis.up);
+    st.fov = O.camera.fov; st.mode = S.cam;
     const u = mat.uniforms, b = O.camBasis;
     u.uCam.value.copy(O.camEnu); u.uRight.value.copy(b.right); u.uUp.value.copy(b.up); u.uDir.value.copy(b.dir);
     u.uTanY.value = Math.tan(rad(O.camera.fov) / 2); u.uAspect.value = O.camera.aspect; u.uTime.value = performance.now() / 1000; u.uRes.value.set(w, h);
@@ -184,6 +215,7 @@ export function createClouds(S) {
 
   return {
     onCase(S) {
+      st.lastRender = -Infinity;
       const g = S.data.grid, nx = g.lon.length, ny = g.lat.length, nz = g.alt_m.length, buf = new Uint8Array(nx * ny * nz);
       let i = 0;
       for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) buf[i++] = Math.round(clamp(g.rh[z][y][x], 0, 100) * 2.55);

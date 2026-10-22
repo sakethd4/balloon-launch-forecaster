@@ -69,8 +69,13 @@ export function createOverlay(earth) {
     const cp = camera.positionWC, d = camera.directionWC, u = camera.upWC, r = camera.rightWC;
     O.cam.x = cp.x; O.cam.y = cp.y; O.cam.z = cp.z;
     cam3.matrixWorld.set(r.x, u.x, -d.x, 0, r.y, u.y, -d.y, 0, r.z, u.z, -d.z, 0, 0, 0, 0, 1);
+    // The renderer calls camera.updateMatrixWorld(): preserve the copied pose in the local matrix too.
+    cam3.matrix.copy(cam3.matrixWorld);
     cam3.matrixWorldInverse.copy(cam3.matrixWorld).invert();
-    cam3.fov = deg(camera.frustum.fovy); cam3.aspect = w / h; cam3.updateProjectionMatrix();
+    const fov = deg(camera.frustum.fovy), aspect = w / h;
+    if (cam3.fov !== fov || cam3.aspect !== aspect) {
+      cam3.fov = fov; cam3.aspect = aspect; cam3.updateProjectionMatrix();
+    }
     world.matrix.copy(O.R);
     const e = world.matrix.elements;
     e[12] = O.anchor.x - cp.x; e[13] = O.anchor.y - cp.y; e[14] = O.anchor.z - cp.z;

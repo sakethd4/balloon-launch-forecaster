@@ -54,3 +54,20 @@ test('forecast interpolation preserves an analytic field across repeated particl
     for (const value of out) assert.ok(Math.abs(value - (2 * lon + 3 * lat + alt / 100)) < 1e-10);
   }
 });
+
+const policy = asModule((await readFile(new URL('../web/js/view-scale.js', import.meta.url), 'utf8')).replace('"./util.js"', JSON.stringify(util)));
+const { windFade, cloudFade, BALLOON_DISPLAY_SCALE } = await import(policy);
+test('all map cameras fade atmosphere smoothly and fully stop at wide zoom', () => {
+  for (const mode of ['orbit', 'chase', 'top']) {
+    for (const [fade, start, end] of [[windFade, 10000, 22000], [cloudFade, 28000, 50000]]) {
+      assert.equal(fade(mode, start), 1); assert.equal(fade(mode, end), 0);
+      let previous = 1;
+      for (let d = start; d <= end + 1000; d += 100) {
+        const current = fade(mode, d); assert.ok(current <= previous && current >= 0); previous = current;
+      }
+      assert.equal(fade(mode, 560000), 0);
+      assert.equal(fade('balloon', 560000), 1);
+    }
+  }
+  assert.ok(BALLOON_DISPLAY_SCALE > 1);
+});

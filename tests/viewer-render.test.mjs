@@ -31,7 +31,7 @@ if (!installed) {
   }
   globalThis.location = {search: ''};
   globalThis.window = {Cesium: {Cartesian3: THREE.Vector3}};
-  globalThis.document = {createElement: () => ({width:1280,height:720,style:{}}), getElementById: () => ({appendChild(){}})};
+  globalThis.document = {createElement: () => ({width:1280,height:720,clientWidth:1280,style:{},getContext:()=>({clearRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){}})}), getElementById: () => ({appendChild(){}})};
   const {createOverlay} = await import(await load('overlay.js'));
   const earth = {viewer: {canvas: {clientWidth:1280,clientHeight:720}},
     scene: {postRender: {addEventListener(){}}},
@@ -114,6 +114,30 @@ if (!installed) {
     assert.equal(O.scene.overrideMaterial,previous);
     assert.deepEqual(nonBalloon.map(o=>o.visible),visibility);
     delete O.renderer.beforeRender;
+  });
+
+  const {createRouteMask,clipRouteSegment}=await import(await load('route-mask.js'));
+  test('route masks keep nominal, selected and travelled paths readable and clear when hidden',()=>{
+    const original=document.createElement; let strokes=0, clears=0;
+    const ctx={clearRect(){clears++;},beginPath(){},moveTo(x,y){assert.ok(Number.isFinite(x)&&Number.isFinite(y));},
+      lineTo(x,y){assert.ok(Number.isFinite(x)&&Number.isFinite(y));},stroke(){strokes++;}};
+    document.createElement=()=>({width:2,height:2,getContext:()=>ctx});
+    const mask=createRouteMask(O); document.createElement=original;
+    const points=[new THREE.Vector3(0,-100,0),new THREE.Vector3(0,100,0)];
+    const f={vis:{hidden:false},selected:null,pathPrim:{show:true},selEnt:{show:true},trail:{show:true},
+      nom:points,selPositions:points,trailPositions:points};
+    mask.update(f,0,10,640,360); assert.equal(strokes,3); assert.equal(ctx.lineWidth,4);
+    mask.update(f,0,10,640,360); assert.equal(strokes,3); assert.equal(clears,1);
+    f.selected=1; mask.update(f,0,10,640,360); assert.equal(strokes,6);
+    f.vis.hidden=true; mask.update(f,0,10,640,360); assert.equal(strokes,6); assert.equal(clears,3);
+    mask.update(f,0,11,640,360); assert.equal(clears,3);
+  });
+  test('route projection clips near/side planes and rejects paths behind the camera',()=>{
+    assert.equal(clipRouteSegment([0,0,0,-1],[0.2,0,0,-1]),null);
+    const near=clipRouteSegment([0,0,-2,1],[0,0,0,1]);
+    assert.equal(near[0][2],-1); assert.equal(near[0][3],1);
+    const edge=clipRouteSegment([-3,0,0,1],[0,0,0,1]); assert.equal(edge[0][0],-1);
+    assert.equal(clipRouteSegment([-4,0,0,1],[-2,0,0,1]),null);
   });
 
 }

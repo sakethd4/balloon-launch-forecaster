@@ -7,6 +7,7 @@ import { clamp, mulberry32, rad } from "./util.js";
 
 import { cloudFade } from "./view-scale.js";
 import { CLOUD_DEPTH_FAR } from "./depth-pass.js";
+import { createRouteMask } from "./route-mask.js";
 
 const params = new URLSearchParams(location.search);
 const SCALE = Number(params.get("clouds")) || 0.5;          // render resolution of the cloud pass relative to the screen
@@ -158,6 +159,7 @@ void main() {
 
 export function createClouds(S) {
   const O = S.overlay, renderer = O.renderer;
+  const routes = createRouteMask(O);
   const quadGeo = new THREE.PlaneGeometry(2, 2);
   const mat = new THREE.ShaderMaterial({
     glslVersion: null, depthTest: false, depthWrite: false,
@@ -173,9 +175,9 @@ export function createClouds(S) {
   const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.UnsignedByteType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
   const comp = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
     transparent: true, depthTest: false, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
-    uniforms: { tex: { value: rt.texture } },
+    uniforms: { tex: { value: rt.texture }, pathMask: { value: routes.texture } },
     vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
-    fragmentShader: "uniform sampler2D tex; varying vec2 vUv; void main(){ gl_FragColor = texture2D(tex, vUv); }" }));
+    fragmentShader: "uniform sampler2D tex, pathMask; varying vec2 vUv; void main(){ gl_FragColor = texture2D(tex, vUv) * (1.0 - texture2D(pathMask, vUv).r); }" }));
   comp.frustumCulled = false; comp.renderOrder = 1000; comp.visible = false;
   O.scene.add(comp);
   mat.uniforms.uNoise.value = noiseTexture(64);
@@ -197,6 +199,8 @@ export function createClouds(S) {
     mat.uniforms.uOpacity.value = fade;
     if (!comp.visible) return;
     const dom = renderer.domElement, sc = SCALE * (0.55 + 0.45 * S.quality), w = Math.max(2, Math.round(dom.width * sc)), h = Math.max(2, Math.round(dom.height * sc));
+    // Route selection must update immediately, even if the stationary cloud texture is being reused.
+    routes.update(S.flight, S.follow, S.t, w, h);
     const resized = rt.width !== w || rt.height !== h;
     if (resized) rt.setSize(w, h);
     const now = performance.now();

@@ -179,3 +179,12 @@ terrain-depth sharing. Cloud cache also invalidates when balloon position change
 Outer data/zoom fades are artificial boundaries; interior gaps may be humidity-driven or procedural. Layer tooltip and
 web/README.md explain this. 18 Node checks pass using pinned Three.js and Cesium (renderer stubbed; camera math real),
 including chase terrain limits/relocation and occluder state restoration. GPU appearance/shader compilation unverified.
+
+### Flight-path cloud readability (2026-10-22)
+
+A cached projected-route mask clears only a narrow antialiased strip of the cloud composite over nominal/selected
+paths and the travelled trail. Original Cesium route styling/terrain tests remain, as does balloon-specific cloud depth
+clipping. Update the mask before the cloud-cache early return so selection/playback changes appear immediately. Clip
+segments in homogeneous coordinates before dividing by w; skip unchanged/blank masks and all work when clouds hide.
+20 viewer checks pass, including route visibility/cache/selection and near/side/behind-camera clipping. GPU appearance
+remains unverified. No backend or forecast changes.

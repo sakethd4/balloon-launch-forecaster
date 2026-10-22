@@ -44,8 +44,8 @@ Rendering fixes (2026-10-22):
   33 ms only when the viewpoint is stationary; moving the camera renders immediately. Projection matrices update only
   when the field of view or aspect ratio changes.
 
-Checks: `node --test tests/viewer.test.mjs tests/viewer-render.test.mjs tests/viewer-camera.test.mjs` (18 passing checks including terrain continuity/retries, imagery throttling, follow controls, camera transforms,
-balloon anchoring/scale, ribbon dimensions and hidden-field render/sampling skips). The five Three.js integration tests
+Checks: `node --test tests/viewer.test.mjs tests/viewer-render.test.mjs tests/viewer-camera.test.mjs` (20 passing checks including terrain continuity/retries, imagery throttling, follow controls, camera transforms,
+balloon anchoring/scale, ribbon dimensions and hidden-field render/sampling skips). The seven Three.js integration tests
 use the app's pinned library in ignored `dist/viewer-check/three.mjs`; without it they report a skip. To obtain it:
 
 ```powershell
@@ -103,3 +103,10 @@ Wind/camera/cloud-depth maintenance (2026-10-22):
   not real weather boundaries. Hover the Clouds layer label for this distinction.
 - Verification: 18 viewer checks pass, including real Cesium ground-limit/relocation tests and depth-pass isolation/state
   restoration. JavaScript syntax checks pass. Browser/GPU shader appearance remains unverified in this session.
+
+Flight-path visibility (2026-10-22): cloud compositing now clears a narrow, antialiased screen-space strip over the
+nominal route, selected route and travelled trail. This reveals the original Cesium path styling while preserving its
+terrain tests; it does not move the trajectories or alter balloon/cloud depth clipping. The mask follows camera movement,
+selection and playback immediately, even when cloud shading reuses a cached frame. It is cached for unchanged views,
+blank in balloon cam, and skipped when clouds are hidden. Projection clips segments before perspective division so
+near-camera paths cannot create screen-filling strokes. Twenty viewer checks pass; final GPU appearance is unverified.

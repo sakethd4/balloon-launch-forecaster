@@ -154,3 +154,8 @@ bounded local camera controls with terrain clearance and resets correctly when l
 clip against balloon geometry to preserve front/behind ordering. Clouds are inferred from real GFS humidity snapshots;
 fine shapes and gaps are procedural, and outer coverage/fade edges are display limits, not observed weather fronts.
 Eighteen viewer checks pass, including the actual Cesium camera math; GPU visual verification remains pending.
+
+
+Flight paths now remain legible through clouds using a narrow cloud-composite mask over the forecast, selected and
+travelled routes. Their original styling and terrain tests remain intact; balloon/cloud depth clipping is preserved.
+Twenty viewer checks pass, with GPU visual verification pending.

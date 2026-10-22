@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Launch Planner 3D</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/Widgets/widgets.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="globe"></div>
+
+<aside id="panel">
+  <header>
+    <h1>Launch Planner <span>3D</span></h1>
+    <select id="caseSelect" aria-label="Flight case"></select>
+    <p id="caseSubtitle"></p>
+  </header>
+
+  <section id="playback">
+    <div class="row">
+      <button id="playBtn" class="primary">Play</button>
+      <button id="restartBtn" title="Back to launch">Restart</button>
+      <label class="inline">Speed
+        <select id="speedSelect">
+          <option value="10">10x</option><option value="30">30x</option><option value="60" selected>60x</option>
+          <option value="120">120x</option><option value="300">300x</option>
+        </select>
+      </label>
+    </div>
+    <div class="row views" role="group" aria-label="Camera">
+      <button data-view="overview">Overview</button><button data-view="chase">Chase</button>
+      <button data-view="top">Top down</button><button data-view="side">Side</button>
+    </div>
+  </section>
+
+  <section id="readout" aria-live="off">
+    <div class="stat"><span class="label">Flight time</span><span class="value" id="rTime">T+00:00</span></div>
+    <div class="stat"><span class="label">Altitude</span><span class="value" id="rAlt">0.0 km</span><span class="sub" id="rAltFt">0 ft</span></div>
+    <div class="stat"><span class="label">Vertical</span><span class="value" id="rVert">0.0 m/s</span><span class="sub" id="rPhase">on the ground</span></div>
+    <div class="stat"><span class="label">From launch</span><span class="value" id="rDist">0.0 km</span><span class="sub" id="rSpeed">0 km/h</span></div>
+  </section>
+
+  <section id="zones">
+    <h2>Where it could come down <small id="endLabel"></small></h2>
+    <div class="zoneRow"><span class="swatch ring50"></span><span>Half of the sampled flights end within <b id="r50">-</b> km</span></div>
+    <div class="zoneRow"><span class="swatch ring90"></span><span>Nine in ten within <b id="r90">-</b> km</span></div>
+    <p class="muted" id="situation"></p>
+    <p id="compare" class="compare" hidden></p>
+  </section>
+
+  <section id="layers">
+    <h2>Layers</h2>
+    <label><input type="checkbox" id="lyEnsemble" checked> Sampled flights (swarm and paths)</label>
+    <label><input type="checkbox" id="lyEnd" checked> End points and rings</label>
+    <label><input type="checkbox" id="lyWinds" checked> Winds aloft at launch</label>
+    <label><input type="checkbox" id="lyDrop" checked> Drop line to the ground</label>
+  </section>
+
+  <section id="live">
+    <h2>Live tracking <small>SondeHub</small></h2>
+    <div class="row">
+      <select id="liveKind"><option value="sondes">Weather-service sonde</option><option value="amateur">Amateur payload</option></select>
+      <input id="liveId" placeholder="serial or callsign" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="row">
+      <button id="liveBtn" class="primary">Track</button>
+      <button id="demoBtn" title="Replays the recorded real climb through the same live code path">Demo feed</button>
+      <label class="inline"><input type="checkbox" id="liveFollow" checked> Follow</label>
+    </div>
+    <p class="muted" id="liveStatus">Not tracking. Needs the balloon's transmissions to reach SondeHub.</p>
+    <div class="liveStats" id="liveStats" hidden>
+      <div><span class="label">Altitude</span><span id="lAlt">-</span></div>
+      <div><span class="label">Vertical</span><span id="lVert">-</span></div>
+      <div><span class="label">Speed</span><span id="lSpeed">-</span></div>
+      <div><span class="label">Offset from forecast</span><span id="lOff">-</span></div>
+    </div>
+  </section>
+
+  <section id="chartWrap">
+    <svg id="chart" viewBox="0 0 320 90" role="img" aria-label="Altitude against flight time; click to jump"></svg>
+  </section>
+
+  <footer>
+    <p id="notes"></p>
+    <p class="muted">Advisory only: not a go/no-go decision. Imagery Esri, Maxar, Earthstar Geographics. Real-balloon data SondeHub and its volunteers (CC BY-SA 2.0).</p>
+  </footer>
+</aside>
+
+<div id="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/Cesium.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

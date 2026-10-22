@@ -33,7 +33,8 @@ class WindField4D:
     """Gridded wind forecast. Arrays are indexed [time, level, lat, lon] (u, v, gh) and
     [time, lat, lon] (u10, v10). Latitude and longitude must be ascending."""
 
-    def __init__(self, lead_h, lat, lon, gh_m, u, v, u10, v10):
+    def __init__(self, lead_h, lat, lon, gh_m, u, v, u10, v10, levels_hpa=None):
+        self.levels_hpa = None if levels_hpa is None else np.asarray(levels_hpa, dtype=float)
         self.lead_h = np.asarray(lead_h, dtype=float)
         self.lat = np.asarray(lat, dtype=float)
         self.lon = np.asarray(lon, dtype=float)
@@ -52,7 +53,28 @@ class WindField4D:
                    ds.u.transpose("lead_h", "isobaricInhPa", "latitude", "longitude").values,
                    ds.v.transpose("lead_h", "isobaricInhPa", "latitude", "longitude").values,
                    ds.u10.transpose("lead_h", "latitude", "longitude").values,
-                   ds.v10.transpose("lead_h", "latitude", "longitude").values)
+                   ds.v10.transpose("lead_h", "latitude", "longitude").values,
+                   levels_hpa=ds.isobaricInhPa.values)
+
+    def with_column_error(self, levels_hpa, du, dv):
+        """A copy whose winds are shifted by one wind-error PROFILE, the same at every place and time.
+
+        `du`, `dv` (m/s) are given on `levels_hpa` and interpolated linearly in log-pressure to the
+        field's own levels; beyond the given levels the nearest value is kept (so the error at the
+        lowest given level also applies near the ground, and the 10 m wind gets it too). Used to turn a
+        sampled wind-error profile (src/uncertainty) into one plausible alternative wind field.
+        """
+        if self.levels_hpa is None:
+            raise ValueError("this field does not know its pressure levels (build it with from_dataset)")
+        order = np.argsort(levels_hpa)                       # np.interp needs ascending x
+        x = np.log(np.asarray(levels_hpa, dtype=float)[order])
+        xi = np.log(self.levels_hpa)
+        eu = np.interp(xi, x, np.asarray(du, dtype=float)[order])
+        ev = np.interp(xi, x, np.asarray(dv, dtype=float)[order])
+        ground_u, ground_v = float(np.asarray(du, dtype=float)[order][-1]), float(np.asarray(dv, dtype=float)[order][-1])
+        return WindField4D(self.lead_h, self.lat, self.lon, self.gh, self.u + eu[None, :, None, None],
+                           self.v + ev[None, :, None, None], self.u10 + ground_u, self.v10 + ground_v,
+                           levels_hpa=self.levels_hpa)
 
     @staticmethod
     def _weights(axis, x):

@@ -25,29 +25,12 @@ import pandas as pd
 
 from src.paths import PROCESSED_DIR
 from src.uncertainty import wind_error as we
+from src.uncertainty.scoring import score
 
 EVAL = PROCESSED_DIR / "eval"
 N_SAMPLES = 100
 SEASONS = {12: "DJF", 1: "DJF", 2: "DJF", 3: "MAM", 4: "MAM", 5: "MAM",
            6: "JJA", 7: "JJA", 8: "JJA", 9: "SON", 10: "SON", 11: "SON"}
-
-
-def energy_score(samples, y, batch=1000):
-    """samples (R, S, 2), y (R, 2) -> energy score per row."""
-    out = np.empty(len(y))
-    for i in range(0, len(y), batch):
-        x, t = samples[i:i + batch], y[i:i + batch]
-        a = np.linalg.norm(x - t[:, None, :], axis=-1).mean(axis=1)
-        b = np.linalg.norm(x[:, :, None, :] - x[:, None, :, :], axis=-1).mean(axis=(1, 2))
-        out[i:i + batch] = a - 0.5 * b
-    return out
-
-
-def score(samples, y):
-    r = np.linalg.norm(samples, axis=-1)                      # sampled landing displacement sizes
-    r50, r90 = np.quantile(r, [0.5, 0.9], axis=1)
-    ry = np.linalg.norm(y, axis=-1)
-    return dict(energy=energy_score(samples, y), cover50=ry <= r50, cover90=ry <= r90, r50=r50, r90=r90)
 
 
 if __name__ == "__main__":

@@ -23,15 +23,10 @@ from sklearn.metrics import r2_score
 
 from src.ingest import gefs, gfs, igra
 from src.paths import PROCESSED_DIR
+from src.uncertainty.features import situation_features
 
 EVAL = PROCESSED_DIR / "eval"
 FEATURES = EVAL / "spread_features.csv"
-LEVELS = [500.0, 300.0, 200.0]
-BOX = 1.0  # degrees around the station
-
-
-def box(ds, lat, lon):
-    return ds.sel(latitude=slice(lat - BOX, lat + BOX), longitude=slice(lon - BOX, lon + BOX))
 
 
 def build_features(flights: pd.DataFrame) -> pd.DataFrame:
@@ -45,11 +40,8 @@ def build_features(flights: pd.DataFrame) -> pd.DataFrame:
             continue
         for st, gs in grp.groupby("station"):
             lat, lon = igra.STATION_INFO[st]["lat"], igra.STATION_INFO[st]["lon"]
-            sp = box(s.spread_ms.sel(isobaricInhPa=LEVELS), lat, lon).mean(["isobaricInhPa", "latitude", "longitude"])
-            sp = sp.interp(lead_h=gs.lead_h.values)  # fills 60/84/108 h from neighbours
-            gw = box(g.sel(isobaricInhPa=LEVELS), lat, lon)
-            wind = np.hypot(gw.u, gw.v).mean(["isobaricInhPa", "latitude", "longitude"]).sel(lead_h=gs.lead_h.values)
-            rows.append(gs.assign(spread_ms=sp.values, gfs_wind_ms=wind.values))
+            sp, wind = situation_features(s, g, lat, lon, gs.lead_h.values)
+            rows.append(gs.assign(spread_ms=sp, gfs_wind_ms=wind))
     return pd.concat(rows)
 
 

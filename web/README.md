@@ -1,17 +1,20 @@
-# Launch Planner 3D (web viewer)
+# Launch Planner (3D web app)
 
-Static page (CesiumJS from a CDN, Esri satellite imagery; no API keys). Open it through a local web server:
+Run it (needs the GFS/GEFS files in `~/balloon-data` and `wind_error_full.joblib` from `scripts.wind_error_model`):
 
-    cd web
-    python -m http.server 8000        # then browse to http://localhost:8000
+    python -u -W ignore -m scripts.serve        # then open http://localhost:8000
 
-The page reads `web/data/*.json`, which is generated (and not in git, 11 MB):
+The server (standard library only) serves this folder and simulates a launch on request: `/api/case?lat=&lon=&lead=&init=&n=`
+flies 100 sampled balloons through the archived GFS forecast with the vectorised 4D simulator (about 0.6 s) and returns the
+flights plus a gridded snapshot of wind, temperature and humidity around the launch. The page needs internet for the map
+imagery, the elevation tiles and the CesiumJS/Three.js libraries (all loaded from public CDNs, no keys).
 
-    python -u -W ignore -m scripts.export_web_case forecast --launch-leads 3:96:1   # 94 launch hours, ~20 min
-    python -u -W ignore -m scripts.export_web_case replay --seed 3                  # one real flight vs the forecast
+What you can do: pick any launch point inside the bright area of the map, pick the launch hour, watch the flight, click a dot
+(a possible flight) to see its landing and follow it, and ride the balloon (Balloon cam: drag to look around, scroll to zoom).
 
-Needs the GFS and GEFS files in `~/balloon-data` and `wind_error_full.joblib` (from `scripts.wind_error_model`).
+Modules (`js/`): `earth` (terrain, imagery, bounds), `flight` (path, dots, rings), `overlay` (Three.js layer locked to Cesium's camera),
+`balloon`, `wind`, `clouds`, `birds` (the 3D scene), `cameras`, `ui`, `main`.
 
-Deep links: `?launch=2026-10-19T13:00:00Z&view=chase&t=0.4&mode=real&debug=1`
+URL options for testing: `?lat=&lon=&lead=&cam=orbit|chase|balloon|top&t=0..1&speed=&play=1&select=&follow=&q=low|mid|high&clouds=0.35&adapt=0`.
 
-Imagery: Esri World Imagery (attribution shown). Real-balloon data: SondeHub and its volunteers, CC BY-SA 2.0.
+Imagery: Esri World Imagery. Elevation: AWS Terrain Tiles. Attribution is shown in the page.

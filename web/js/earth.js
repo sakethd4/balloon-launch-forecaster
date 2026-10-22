@@ -1,6 +1,8 @@
 // The globe: real 3D terrain (free AWS elevation tiles), satellite imagery with shaded relief baked in, camera limits
 // that keep the user inside the region we have forecasts for, and a dimmed mask outside it.
-import { clamp, deg, rad, smoothstep } from "./util.js";
+import { clamp, deg, rad } from "./util.js";
+
+import { mercatorHeightmap, heightmapRequests } from "./terrain-grid.js";
 
 const C = window.Cesium;
 const ESRI = "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
@@ -23,15 +25,18 @@ export function demTile(z, x, y) {
   const key = `${z}/${x}/${y}`;
   if (demCache.has(key)) { const p = demCache.get(key); demCache.delete(key); demCache.set(key, p); return p; }
   const p = (async () => {
-    const r = await fetch(DEM.replace("{z}", z).replace("{x}", x).replace("{y}", y));
+    const r = await fetch(DEM.replace("{z}", z).replace("{x}", x).replace("{y}", y), { signal: AbortSignal.timeout(12000) });
     if (!r.ok) return null;
     const bmp = await createImageBitmap(await r.blob(), { colorSpaceConversion: "none", premultiplyAlpha: "none" });
     const cv = new OffscreenCanvas(256, 256), ctx = cv.getContext("2d", { willReadFrequently: true });
     ctx.drawImage(bmp, 0, 0);
     const px = ctx.getImageData(0, 0, 256, 256).data, h = new Float32Array(256 * 256);
     for (let i = 0; i < h.length; i++) h[i] = px[i * 4] * 256 + px[i * 4 + 1] + px[i * 4 + 2] / 256 - 32768;
+    bmp.close();
     return h;
   })().catch(() => null);
+  // A network failure is temporary. Keep coalescing in-flight work, but allow failed tiles to retry.
+  p.then(data => { if (!data && demCache.get(key) === p) demCache.delete(key); });
   demCache.set(key, p);
   if (demCache.size > 700) demCache.delete(demCache.keys().next().value);
   return p;
@@ -51,32 +56,10 @@ export async function elevationAt(lat, lon, z = 12) {
 }
 
 function terrainProvider() {
-  const tiling = new C.GeographicTilingScheme();
+  // Native source tiles and heightmap vertices now use the same projection and level numbering.
   return new C.CustomHeightmapTerrainProvider({
-    width: 65, height: 65, tilingScheme: tiling,
-    callback: async (x, y, level) => {
-      const out = new Float32Array(65 * 65);
-      if (level < 4) return out;
-      const r = tiling.tileXYToRectangle(x, y, level);
-      const W = deg(r.west), E = deg(r.east), S = deg(r.south), N = deg(r.north), z = Math.min(DEM_MAX_Z, level + 1);
-      const x0 = Math.floor(lonToX(W, z)), x1 = Math.floor(lonToX(E, z) - 1e-9), y0 = Math.floor(latToY(N, z)), y1 = Math.floor(latToY(S, z) - 1e-9);
-      const need = [];
-      for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) need.push([tx, ty]);
-      const tiles = new Map();
-      await Promise.all(need.map(async ([tx, ty]) => tiles.set(tx + "," + ty, await demTile(z, tx, ty))));
-      for (let j = 0; j < 65; j++) {
-        const lat = N - (N - S) * j / 64, fy = latToY(lat, z);
-        for (let i = 0; i < 65; i++) {
-          const fx = lonToX(W + (E - W) * i / 64, z), tx = Math.min(Math.floor(fx), x1), ty = Math.min(Math.floor(fy), y1), t = tiles.get(tx + "," + ty);
-          if (!t) continue;
-          const px = clamp((fx - tx) * 256 - 0.5, 0, 254.999), py = clamp((fy - ty) * 256 - 0.5, 0, 254.999);
-          const xi = Math.floor(px), yi = Math.floor(py), a = px - xi, b = py - yi;
-          const h = (u, v) => t[v * 256 + u];
-          out[j * 65 + i] = Math.max(0, (h(xi, yi) * (1 - a) + h(xi + 1, yi) * a) * (1 - b) + (h(xi, yi + 1) * (1 - a) + h(xi + 1, yi + 1) * a) * b);
-        }
-      }
-      return out;
-    },
+    width: 65, height: 65, tilingScheme: new C.WebMercatorTilingScheme(),
+    callback: heightmapRequests((x, y, level) => mercatorHeightmap(x, y, level, demTile, DEM_MAX_Z)),
   });
 }
 
@@ -98,11 +81,11 @@ async function reliefTile(x, y, level) {
   }
   const lat = deg(Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 0.5) / 2 ** level)))), mpp = 156543.03392 * Math.cos(rad(lat)) / 2 ** level;
   const E = 2.2, zen = rad(90 - 38), az = rad(315), out = new Float32Array(256 * 256), flat = Math.cos(zen);
+  const lightX = -Math.cos(az) * Math.sin(zen), lightY = Math.sin(az) * Math.sin(zen);
   for (let j = 0; j < 256; j++) for (let i = 0; i < 256; i++) {
     const l = h[j * 256 + Math.max(i - 1, 0)], r = h[j * 256 + Math.min(i + 1, 255)], u = h[Math.max(j - 1, 0) * 256 + i], dn = h[Math.min(j + 1, 255) * 256 + i];
     const dzdx = E * (r - l) / (2 * mpp), dzdy = E * (u - dn) / (2 * mpp);
-    const slope = Math.atan(Math.hypot(dzdx, dzdy)), asp = Math.atan2(dzdy, -dzdx);
-    const hs = flat * Math.cos(slope) + Math.sin(zen) * Math.sin(slope) * Math.cos(az - asp);
+    const hs = (flat + lightX * dzdx + lightY * dzdy) / Math.sqrt(1 + dzdx * dzdx + dzdy * dzdy);
     out[j * 256 + i] = clamp(1 + 1.25 * (hs - flat), 0.55, 1.4);
   }
   return out;
@@ -110,21 +93,25 @@ async function reliefTile(x, y, level) {
 function reliefImagery() {
   const base = new C.UrlTemplateImageryProvider({ url: ESRI, maximumLevel: 18, credit: "Imagery: Esri, Maxar, Earthstar Geographics. Elevation: Mapzen/AWS Terrain Tiles" });
   const orig = base.requestImage.bind(base);
-  base.requestImage = async function (x, y, level, request) {
-    const img = await orig(x, y, level, request);
-    if (!img) return img;
-    const shade = await reliefTile(x, y, level).catch(() => null);
-    if (!shade) return img;
-    const cv = document.createElement("canvas"); cv.width = cv.height = 256;
-    const ctx = cv.getContext("2d", { willReadFrequently: true });
-    ctx.drawImage(img, 0, 0, 256, 256);
-    const id = ctx.getImageData(0, 0, 256, 256), d = id.data;
-    for (let i = 0, k = 0; i < shade.length; i++, k += 4) {
-      const m = shade[i];
-      d[k] = Math.min(255, d[k] * m); d[k + 1] = Math.min(255, d[k + 1] * m); d[k + 2] = Math.min(255, d[k + 2] * m);
-    }
-    ctx.putImageData(id, 0, 0);
-    return cv;
+  base.requestImage = function (x, y, level, request) {
+    const pending = orig(x, y, level, request);
+    // Preserve Cesium's synchronous throttle signal; Promise<undefined> marks tiles as failed.
+    if (!pending) return undefined;
+    return Promise.resolve(pending).then(async (img) => {
+      if (!img) return img;
+      const shade = await reliefTile(x, y, level).catch(() => null);
+      if (!shade) return img;
+      const cv = document.createElement("canvas"); cv.width = cv.height = 256;
+      const ctx = cv.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, 256, 256);
+      const id = ctx.getImageData(0, 0, 256, 256), d = id.data;
+      for (let i = 0, k = 0; i < shade.length; i++, k += 4) {
+        const m = shade[i];
+        d[k] = Math.min(255, d[k] * m); d[k + 1] = Math.min(255, d[k + 1] * m); d[k + 2] = Math.min(255, d[k + 2] * m);
+      }
+      ctx.putImageData(id, 0, 0);
+      return cv;
+    });
   };
   return base;
 }
@@ -143,6 +130,9 @@ export function createEarth(region) {
   scene.verticalExaggeration = 1.8;
   scene.globe.depthTestAgainstTerrain = true;
   scene.globe.maximumScreenSpaceError = 1.6;
+  scene.globe.tileCacheSize = 300;
+  scene.globe.preloadAncestors = true; scene.globe.preloadSiblings = true;
+  scene.globe.loadingDescendantLimit = 12;
   scene.globe.enableLighting = false;                    // day and night are set by us (see setDaylight)
   scene.globe.showGroundAtmosphere = true;
   scene.skyAtmosphere.show = true;

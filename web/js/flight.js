@@ -42,15 +42,17 @@ export class Flight {
 
     // one moving dot per possible flight, and where each one lands
     this.dots = prim(new C.PointPrimitiveCollection());
-    this.ends = prim(new C.PointPrimitiveCollection());
+    this.ends = [];
     this.ens.forEach((_, k) => {
       this.dots.add({ id: { kind: "dot", i: k }, position: this.ens[k][0], pixelSize: 5, color: C.Color.fromCssColorString("#74a5c9").withAlpha(0.48),
         outlineColor: C.Color.fromCssColorString("#74c0ff").withAlpha(0.55), outlineWidth: 0, disableDepthTestDistance: 0,
         scaleByDistance: new C.NearFarScalar(2e3, 1, 4e5, 0.35) });
       const e = d.endpoints[k];
-      this.ends.add({ id: { kind: "end", i: k }, position: cart(e[0], e[1], 8), pixelSize: 8, color: ORANGE.withAlpha(0.92),
+      // Entity points support terrain clamping; PointPrimitive ignores heightReference.
+      const marker = ent({ position: cart(e[0], e[1], 0), point: { pixelSize: 8, color: ORANGE.withAlpha(0.92),
         outlineColor: C.Color.BLACK.withAlpha(0.45), outlineWidth: 1.5, heightReference: C.HeightReference.CLAMP_TO_GROUND,
-        disableDepthTestDistance: 3e4, scaleByDistance: new C.NearFarScalar(2e3, 1.6, 4e5, 0.75) });
+        disableDepthTestDistance: Number.POSITIVE_INFINITY, scaleByDistance: new C.NearFarScalar(2e3, 1.6, 4e5, 0.75) } });
+      marker.kind = "end"; marker.i = k; this.ends.push(marker);
     });
     // rings around the forecast landing
     const [elat, elon] = [d.nominal.lat.at(-1), d.nominal.lon.at(-1)];
@@ -61,23 +63,23 @@ export class Flight {
       ent({ position: cart(elat, elon, 0), ellipse: { semiMajorAxis: m.r90_km * 1000, semiMinorAxis: m.r90_km * 1000, material: ORANGE.withAlpha(0.10),
         classificationType: C.ClassificationType.TERRAIN } }),
       ent({ position: cart(elat, elon, 0), point: { pixelSize: 11, color: C.Color.WHITE, outlineColor: C.Color.BLACK, outlineWidth: 2,
-        heightReference: C.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: 3e4 },
+        heightReference: C.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY },
       label: { text: "Forecast landing", font: "600 12px Inter, system-ui, sans-serif", fillColor: C.Color.WHITE, outlineColor: C.Color.BLACK, outlineWidth: 3,
         style: C.LabelStyle.FILL_AND_OUTLINE, pixelOffset: new C.Cartesian2(0, -20), verticalOrigin: C.VerticalOrigin.BOTTOM,
-        heightReference: C.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: 3e4 } }),
+        heightReference: C.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY } }),
     ];
     this.launchEnt = ent({ position: cart(m.launch.lat, m.launch.lon, 0), point: { pixelSize: 11, color: C.Color.WHITE, outlineColor: C.Color.BLACK, outlineWidth: 2,
-      heightReference: C.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: 3e4 },
+      heightReference: C.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY },
     label: { text: "Launch", font: "600 12px Inter, system-ui, sans-serif", fillColor: C.Color.WHITE, outlineColor: C.Color.BLACK, outlineWidth: 3,
       style: C.LabelStyle.FILL_AND_OUTLINE, pixelOffset: new C.Cartesian2(14, 6), horizontalOrigin: C.HorizontalOrigin.LEFT,
-      heightReference: C.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: 3e4 } });
+      heightReference: C.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY } });
 
     // path of the selected flight, and a ring on its landing
     this.selPositions = [];
     this.selEnt = ent({ polyline: { positions: new C.CallbackProperty(() => this.selPositions, false), width: 3.5,
       material: new C.PolylineGlowMaterialProperty({ glowPower: 0.25, color: C.Color.fromCssColorString("#ffd27a") }) }, show: false });
     this.selRing = ent({ position: new C.CallbackProperty(() => this.selEnd || C.Cartesian3.ZERO, false), point: { pixelSize: 17, color: C.Color.TRANSPARENT,
-      outlineColor: C.Color.fromCssColorString("#ffd27a"), outlineWidth: 3, heightReference: C.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: 3e4 }, show: false });
+      outlineColor: C.Color.fromCssColorString("#ffd27a"), outlineWidth: 3, heightReference: C.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY }, show: false });
     // trail of the followed balloon
     this.trailPositions = [];
     this.trail = ent({ polyline: { positions: new C.CallbackProperty(() => this.trailPositions, false), width: 4,
@@ -100,7 +102,7 @@ export class Flight {
     if (this._lastT === t && this._lastFollow === follow) return;
     this._lastT = t; this._lastFollow = follow;
     // A followed flight keeps its complete projected route even after the detail card closes.
-    const route = follow >= 0 ? follow : this.selected;
+    const route = this.selected ?? (follow >= 0 ? follow : null);
     this.selPositions = route != null ? this.ens[route] : [];
     this.selEnt.show = !this.vis?.hidden && route != null;
     const [i, f] = bracket(this.times, t), tmp = this._tmp || (this._tmp = new C.Cartesian3());
@@ -123,7 +125,7 @@ export class Flight {
   setVisible({ dots, rings, hidden }) {
     const v = this.vis = { dots: dots ?? this.vis?.dots ?? true, rings: rings ?? this.vis?.rings ?? true, hidden: hidden ?? this.vis?.hidden ?? false };
     const on = !v.hidden;
-    this.pathPrim.show = on; this.underlay.show = on; this.dots.show = on && v.dots; this.ends.show = on && v.dots;
+    this.pathPrim.show = on; this.underlay.show = on; this.dots.show = on && v.dots; this.ends.forEach((e) => { e.show = on && v.dots; });
     this.rings.forEach((r) => { r.show = on && v.rings; });
     this.launchEnt.show = on; this.trail.show = on;
     this.selEnt.show = on && (this.selected != null || this._lastFollow >= 0); this.selRing.show = on && this.selected != null;

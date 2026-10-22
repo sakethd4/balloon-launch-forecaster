@@ -77,10 +77,10 @@ float density(vec3 p, float h, bool detail) {
   vec2 n1 = texture(uNoise, q / 11000.0).rg;
   vec3 rotated = vec3(q.x * 0.8 + q.y * 0.6, q.y * 0.8 - q.x * 0.6, q.z);
   n1 = mix(n1, texture(uNoise, rotated / 17321.0 + vec3(0.31, 0.67, uTime * 0.0009)).rg, 0.45);
-  base *= smoothstep(0.2, 0.7, weather);
+  base *= mix(0.85, 1.15, weather);
   // Humidity controls the fraction occupied by billows instead of making a uniform sheet.
   float shape = n1.r * 0.7 + n1.g * 0.3;
-  float d = (shape - (0.72 - base * 0.5)) / 0.4;
+  float d = (shape - (0.52 - base * 0.28)) / 0.35;
   if (detail) { vec2 n2 = texture(uNoise, q / 2300.0).rg; d += (n2.g - 0.45) * 0.38 * (1.0 - base * 0.4); d -= (n2.r - 0.5) * 0.15; }
   float fadeTop = (1.0 - smoothstep(uHMax - 1500.0, uHMax, h)), fadeBot = smoothstep(uHMin, uHMin + 500.0, h);
   return clamp(d * 1.7, 0.0, 1.0) * fadeTop * fadeBot;

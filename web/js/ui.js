@@ -44,10 +44,10 @@ export function initUI(S, h) {
   $("speeds").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { h.setSpeed(Number(b.dataset.speed)); setSpeedChip(Number(b.dataset.speed)); } });
   $("chart").addEventListener("click", (e) => { const r = $("chart").getBoundingClientRect(); h.seek(((e.clientX - r.left) / r.width * 360 - 30) / 320); });
   // cameras, drawer, layers
-  $("camModes").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) h.setCam(b.dataset.cam); });
-  $("followReset").addEventListener("click", () => h.follow(-1));
+  $("camModes").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b?.dataset.cam) h.setCam(b.dataset.cam); });
+  $("stopFollow").addEventListener("click", () => h.follow(-1));
   $("detailsClose").addEventListener("click", () => h.select(null));
-  $("dFollow").addEventListener("click", () => { if (S.selected != null) h.follow(S.selected); });
+  $("dFollow").addEventListener("click", () => { if (S.selected != null) h.follow(S.follow === S.selected ? -1 : S.selected); });
   document.querySelectorAll("#cardLayers h2.toggle").forEach((t) => t.addEventListener("click", () => t.parentElement.classList.toggle("collapsed")));
   for (const id of ["lyWind", "lyClouds", "lyBirds", "lyDots", "lyRings"]) $(id).addEventListener("change", () => h.layers());
   $("exag").addEventListener("input", (e) => { $("exagOut").textContent = `${Number(e.target.value).toFixed(1)}x`; h.exaggeration(Number(e.target.value)); });
@@ -61,7 +61,10 @@ export function initUI(S, h) {
 export function setSpeedChip(v) { document.querySelectorAll("#speeds button").forEach((b) => b.classList.toggle("on", Number(b.dataset.speed) === v)); }
 export function setCamChip(mode) { document.querySelectorAll("#camModes button").forEach((b) => b.classList.toggle("on", b.dataset.cam === mode)); document.body.classList.toggle("balloon-cam", mode === "balloon"); $("hud").hidden = mode !== "balloon"; }
 export function setPicking(on) { $("pickBtn").classList.toggle("picking", on); $("pickBtn").querySelector("span").textContent = on ? "Click the map..." : "Pick on the map"; $("pickHint").hidden = !on; document.body.classList.toggle("picking", on); }
-export function setFollowChip(text) { $("followChip").hidden = !text; if (text) $("followText").textContent = text; }
+export function setFollowing(k) {
+  $("stopFollow").hidden = k < 0;
+  $("stopFollow").title = k < 0 ? "Stop following" : `Stop following possible flight ${k + 1}`;
+}
 
 /* ---- launch site and outcome ---- */
 export function renderSite(S) {
@@ -180,7 +183,7 @@ export function showDetails(S, k, info) {
   ];
   if (info.leftDomain) rows.push(["Forecast area", "flight leaves it"]);
   $("dList").innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join("");
-  $("dFollow").textContent = S.follow === k ? "Following this balloon" : "Follow this balloon";
+  $("dFollow").textContent = S.follow === k ? "Stop following" : "Follow this balloon";
 }
 export function hideDetails() { $("details").hidden = true; }
 export function updateDetailsElevation(elev) { const dd = $("dList").children[3]; if (dd) dd.textContent = `${Math.round(elev)} m`; }

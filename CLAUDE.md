@@ -147,3 +147,21 @@ most 33 ms, moving views render immediately. Weather variation is generated once
 Nine Node checks pass (five logic checks and four integration checks using the pinned Three.js library with a stubbed
 renderer); JavaScript syntax checks pass. GPU shader compilation, appearance and real frame rate remain unverified.
 See web/README.md for verification setup. The preceding full Python suite passed 45 tests; no Python changes here.
+
+### Follow UI / terrain maintenance (2026-10-22)
+
+Use terrain-clamped Entity points for landing markers: raw PointPrimitive ignores heightReference. Ground markers and
+selected landing rings disable terrain depth clipping at every range. Selected flight preview takes precedence over the
+followed flight route while the drawer is open; closing it restores the followed route. Follow closes the drawer and
+exposes one Stop following button beside camera modes; stopping returns Chase/payload to Orbit. Removed following bubble
+and top-left title, anchored left cards near bottom. Map wind now uses fixed 120-600 m by 12-20 m ribbons with spatial
+fade around the followed balloon (not the distant camera), fading at 35-70 km. Payload ribbons are unchanged. Clouds
+preserve humidity-driven density and fade at 65-120 km; procedural weather modulation no longer erases most density.
+Terrain uses Web-Mercator tiles aligned with Terrarium, bilinear cross-tile borders, and source heights even at coarse
+levels. Bounded request/cache helpers retain parent terrain while loading or retrying failed source tiles instead of
+returning zero patches. Evict failed DEM cache entries; 12 s download timeout. Preserve the imagery provider's synchronous
+undefined retry signal. Relief shading now uses equivalent vector lighting without per-pixel trig. Globe cache 300 tiles,
+heightmap cache 300, max 6 heightmap jobs, sibling/ancestor preloading. No paid data/account required. Progressive LOD is
+still expected; GPU visual quality unverified (browser tool reports Edge unavailable).
+Verification: 15 Node checks pass, including terrain seams/refinement, missing-tile retries, imagery throttle semantics,
+follow controls and selection during following; all JS syntax checks pass. No backend/model changes.

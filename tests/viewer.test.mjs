@@ -19,7 +19,7 @@ function fixture() {
   const points = [0, 10, 20].map(x => new Cartesian3(x, 0, 100));
   Object.assign(f, { times: [0, 10, 20], ens: [points], nom: points, selected: null,
     data: { endpoints: [[30, -97]] }, vis: { hidden: false }, selEnt: {}, selRing: {},
-    dots: { get: () => ({}) }, ends: {}, rings: [], pathPrim: {}, underlay: {}, launchEnt: {}, trail: {} });
+    dots: { get: () => ({}) }, ends: [], rings: [], pathPrim: {}, underlay: {}, launchEnt: {}, trail: {} });
   return f;
 }
 test('follow retains the full projected route after selection closes', () => {
@@ -59,7 +59,7 @@ const policy = asModule((await readFile(new URL('../web/js/view-scale.js', impor
 const { windFade, cloudFade, BALLOON_DISPLAY_SCALE } = await import(policy);
 test('all map cameras fade atmosphere smoothly and fully stop at wide zoom', () => {
   for (const mode of ['orbit', 'chase', 'top']) {
-    for (const [fade, start, end] of [[windFade, 10000, 22000], [cloudFade, 28000, 50000]]) {
+    for (const [fade, start, end] of [[windFade, 35000, 70000], [cloudFade, 65000, 120000]]) {
       assert.equal(fade(mode, start), 1); assert.equal(fade(mode, end), 0);
       let previous = 1;
       for (let d = start; d <= end + 1000; d += 100) {
@@ -70,4 +70,80 @@ test('all map cameras fade atmosphere smoothly and fully stop at wide zoom', () 
     }
   }
   assert.ok(BALLOON_DISPLAY_SCALE > 1);
+});
+
+test('selecting a second balloon previews its route until following is switched', () => {
+  const f = fixture(); f.ens.push(f.ens[0].map(p => new Cartesian3(p.x, 50, p.z)));
+  f.data.endpoints.push([31, -98]);
+  f.update(5, 0); f.select(1); f.update(5, 0);
+  assert.equal(f.selPositions, f.ens[1]);
+  f.update(6, 0); assert.equal(f.selPositions, f.ens[1]);
+  f.select(null); f.update(6, 1); assert.equal(f.selPositions, f.ens[1]);
+  f.update(7, 1); assert.equal(f.trailPositions.at(-1).y, 50);
+  f.select(0); f.update(7, 1); assert.equal(f.selPositions, f.ens[0]);
+  f.select(null); f.update(7, 1); assert.equal(f.selPositions, f.ens[1]);
+});
+const terrainSource = (await readFile(new URL('../web/js/terrain-grid.js', import.meta.url), 'utf8')).replace('"./util.js"', JSON.stringify(util));
+const { mercatorHeightmap, heightmapRequests } = await import(asModule(terrainSource));
+const syntheticDEM = async (z, x, y) => Float32Array.from({length:256*256}, (_,i) =>
+  100 + (x*256 + i%256 + 0.5) / 2**z + 2*(y*256 + Math.floor(i/256) + 0.5) / 2**z);
+test('adjacent terrain tiles and parent/child refinements agree on shared edges', async () => {
+  const a = await mercatorHeightmap(2,2,3,syntheticDEM);
+  const b = await mercatorHeightmap(3,2,3,syntheticDEM);
+  for (let row=0;row<65;row++) assert.equal(a[row*65+64], b[row*65]);
+  const parent = await mercatorHeightmap(1,1,2,syntheticDEM);
+  for (let row=0;row<=32;row++) for (let col=0;col<=32;col++)
+    assert.equal(parent[row*65+col], a[row*2*65+col*2]);
+  const fine = await mercatorHeightmap(4,4,4,syntheticDEM,3);
+  for (let row=0;row<=32;row++) for (let col=0;col<=32;col++)
+    assert.equal(a[row*65+col], fine[row*2*65+col*2]);
+});
+test('missing elevation never produces a bogus zero-height tile', async () => {
+  await assert.rejects(mercatorHeightmap(2,2,3,async () => null), /Elevation tile unavailable/);
+});
+test('terrain requests coalesce, limit concurrent work, retain parent fallback and retry failures', async () => {
+  let count=0, time=0, fail=true;
+  const callback=heightmapRequests(async () => {count++; if(fail) throw Error('network'); return new Float32Array([123]);},
+    {concurrency:1,now:()=>time});
+  assert.equal(callback(0,0,0),undefined); assert.equal(callback(0,0,0),undefined);
+  assert.equal(callback(1,0,0),undefined);
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(count,1);
+  assert.equal(callback(0,0,0),undefined);
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(count,1);
+  fail=false; time=3001; callback(0,0,0);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(callback(0,0,0),new Float32Array([123])); assert.equal(count,2);
+});
+
+// Exercise the actual imagery wrapper and DOM event handlers with small host adapters.
+window.Cesium.UrlTemplateImageryProvider = class {
+  constructor() { this.throttled=true; this.image={tile:true}; }
+  requestImage() { return this.throttled ? undefined : Promise.resolve(this.image); }
+};
+const earthSource = (await readFile(new URL('../web/js/earth.js', import.meta.url), 'utf8'))
+  .replace('"./util.js"',JSON.stringify(util)).replace('"./terrain-grid.js"',JSON.stringify(asModule(terrainSource)))
+  + '\nexport { reliefImagery };';
+const earthURL=asModule(earthSource), {reliefImagery}=await import(earthURL);
+test('imagery preserves the synchronous retry signal and returns loaded images',async()=>{
+  const provider=reliefImagery(); assert.equal(provider.requestImage(0,0,0),undefined);
+  provider.throttled=false; assert.equal(await provider.requestImage(0,0,0),provider.image);
+});
+const uiSource=(await readFile(new URL('../web/js/ui.js',import.meta.url),'utf8'))
+  .replace('"./util.js"',JSON.stringify(util)).replace('"./earth.js"',JSON.stringify(earthURL));
+const UI=await import(asModule(uiSource));
+test('follow controls toggle follow/stop without treating the stop button as a camera mode',()=>{
+  const elements=new Map();
+  globalThis.document={activeElement:{tagName:'BODY'}, querySelectorAll:()=>[], getElementById(id){
+    if(!elements.has(id)) elements.set(id,{style:{},listeners:{},addEventListener(event,fn){this.listeners[event]=fn;}});
+    return elements.get(id);
+  }};
+  window.addEventListener=()=>{};
+  const state={selected:2,follow:1}; const calls=[];
+  UI.initUI(state,{follow:k=>calls.push(['follow',k]),setCam:k=>calls.push(['cam',k])});
+  UI.setFollowing(2); assert.equal(elements.get('stopFollow').hidden,false);
+  elements.get('dFollow').listeners.click(); assert.deepEqual(calls.pop(),['follow',2]);
+  state.follow=2; elements.get('dFollow').listeners.click(); assert.deepEqual(calls.pop(),['follow',-1]);
+  elements.get('stopFollow').listeners.click(); assert.deepEqual(calls.pop(),['follow',-1]);
+  elements.get('camModes').listeners.click({target:{closest:()=>({dataset:{}})}}); assert.equal(calls.length,0);
+  UI.setFollowing(-1); assert.equal(elements.get('stopFollow').hidden,true);
 });

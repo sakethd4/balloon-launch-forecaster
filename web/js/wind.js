@@ -88,19 +88,20 @@ export function createWind(S) {
         const v = sample[1] + Math.cos(e * 0.0027 - time * 0.23) * swirl;
         e += u * simDt; n += v * simDt;
         pos[j] = e; pos[j + 1] = n; pos[j + 2] = z;
-        const length = clamp(40 + speed * 5, 40, 240), norm = Math.max(Math.hypot(u, v), 0.1);
+        const length = (ride ? clamp(40 + speed * 5, 40, 240) : clamp(120 + speed * 10, 120, 600)), norm = Math.max(Math.hypot(u, v), 0.1);
         heads[j] = e; heads[j + 1] = n; heads[j + 2] = z;
         tails[j] = e - u / norm * length; tails[j + 1] = n - v / norm * length; tails[j + 2] = z;
-        widths[i] = 2.5 + 2 * smoothstep(0, 30, speed);
+        widths[i] = ride ? 2.5 + 2 * smoothstep(0, 30, speed) : 12 + 8 * smoothstep(0, 30, speed);
         bends[i] = Math.sin(i * 2.399 + time * 0.18) * length * 0.15;
         tempColor(sample[2], rgb);
         // Subtle tint: avoid a solid blue cloud when many trails overlap.
         for (let c = 0; c < 3; c++) colors[k + c] = rgb[c] * 0.55 + 0.45;
         const dist = Math.hypot(e - camera.x, n - camera.y, z - camera.z);
+        const fieldDist = Math.hypot(e - focus.x, n - focus.y);
         const lifeFade = Math.min(age[i] / 1.5, (life[i] - age[i]) / 2, 1);
         const altitudeFade = smoothstep(ground + 25, ground + 160, alt) * (1 - smoothstep(13700, 14200, alt));
         colors[k + 3] = fade * lifeFade * altitudeFade * smoothstep(15, 100, dist)
-          * (1 - smoothstep(radius * 0.7, radius * 1.6, dist)) * (ride ? 0.32 : 0.55);
+          * (1 - smoothstep(radius * 0.7, radius * 1.6, ride ? dist : fieldDist)) * (ride ? 0.32 : 0.55);
       }
       reset = false;
       for (const attribute of attributes) {

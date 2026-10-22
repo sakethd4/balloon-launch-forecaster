@@ -17,19 +17,16 @@
   <div id="globe"></div>
 </div>
 
-<header id="brand">
-  <svg viewBox="0 0 32 32" aria-hidden="true"><defs><radialGradient id="bg" cx="40%" cy="35%"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#a9c4e6"/></radialGradient></defs>
-    <ellipse cx="16" cy="12" rx="8" ry="9.5" fill="url(#bg)"/><path d="M16 21.5v5" stroke="#cfd8e6" stroke-width="1.2"/><rect x="13" y="26" width="6" height="4.2" rx="1" fill="#e9eef6"/></svg>
-  <div><b>Launch Planner</b><span>Where will the balloon go?</span></div>
-</header>
+
 
 <div id="timePill"><span id="sunGlyph"></span><span id="timeText">-</span></div>
 
 <nav id="camModes" aria-label="Camera">
   <button data-cam="orbit" class="on">Orbit</button><button data-cam="chase">Chase</button>
   <button data-cam="balloon">Balloon cam</button><button data-cam="top">Top down</button>
+  <button id="stopFollow" hidden>Stop following</button>
 </nav>
-<div id="followChip" hidden><span id="followText">Following: forecast balloon</span><button id="followReset" title="Back to the forecast balloon">&times;</button></div>
+
 
 <aside id="left">
   <section class="card" id="cardSite">

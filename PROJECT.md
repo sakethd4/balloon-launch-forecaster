@@ -139,3 +139,11 @@ perspective. Wind is now soft curved ribbons, with no expanding coloured haze or
 vary irregularly and evolve. Wide map views fade out wind (10-22 km) and clouds (28-50 km), then skip their processing.
 Performance work also reuses stationary cloud frames briefly and avoids unchanged projection updates. Nine viewer
 logic/Three.js integration checks pass; GPU visual verification remains pending. See web/README.md for details.
+
+
+Follow/terrain maintenance: landing dots now clamp to real terrain without depth clipping. Inspecting another flight
+keeps its preview highlighted; Follow dismisses the drawer, with one Stop following action beside camera modes.
+Removed the title/follow bubble and lowered the left cards. Restored humid cloud density and extended map wind/cloud
+visibility while preserving payload wind. Using the same free map sources, terrain now shares the source tiling,
+interpolates shared borders, retains parent surfaces on failed downloads, and caches/preloads tiles for smoother movement.
+Streaming detail still refines progressively; 15 automated viewer checks pass, with real-GPU visual checks pending.

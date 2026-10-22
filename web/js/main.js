@@ -78,9 +78,10 @@ const handlers = {
   follow(k) {
     if (!Number.isInteger(k) || k >= S.data.meta.n) k = -1;                 // anything that is not a flight number means the forecast balloon
     S.follow = k;
-    ui.setFollowChip(k < 0 ? null : `Following: possible flight ${k + 1}`);
-    if (S.selected != null) handlers.select(S.selected);
+    ui.setFollowing(k);
+    handlers.select(null); // Following closes the inspection drawer; the route remains on the globe.
     if (k >= 0 && S.cam === "orbit") handlers.setCam("chase");
+    else if (k < 0 && (S.cam === "chase" || S.cam === "balloon")) handlers.setCam("orbit");
     S.modules.forEach((m) => m.onFollow && m.onFollow(S));
   },
   layers() {
@@ -123,7 +124,7 @@ function apply(data) {
   S.tEnd = data.t_s.at(-1); S.t = 0; S.playing = wasPlaying; S.siteChanged = false; S.firstLoad = false;
   S.grid = new Grid(data.grid, m.launch.lat, m.launch.lon);
   S.overlay.setAnchor(m.launch.lat, m.launch.lon);
-  S.follow = -1; ui.setFollowChip(null); S.selected = null; ui.hideDetails();
+  S.follow = -1; ui.setFollowing(-1); S.selected = null; ui.hideDetails();
   S.bearing = Math.atan2((data.nominal.lon.at(-1) - m.launch.lon) * Math.cos(m.launch.lat * Math.PI / 180), data.nominal.lat.at(-1) - m.launch.lat);
   const pts = [...S.flight.nom, ...data.endpoints.map((e) => C.Cartesian3.fromDegrees(e[1], e[0], 0))];
   S.sphere = C.BoundingSphere.fromPoints(pts); S.sphere.radius = Math.max(S.sphere.radius, 6000);

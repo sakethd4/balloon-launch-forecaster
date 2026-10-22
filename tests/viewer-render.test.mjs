@@ -68,11 +68,16 @@ if (!installed) {
     const a = geometry.attributes.aHead.array, b = geometry.attributes.aTail.array;
     for (let i=0;i<geometry.instanceCount;i++) {
       const j=i*3, length=Math.hypot(a[j]-b[j],a[j+1]-b[j+1],a[j+2]-b[j+2]);
-      assert.ok(length >= 39.99 && length <= 240.01); assert.equal(a[j+2],b[j+2]);
+      assert.ok(length >= 119.99 && length <= 600.01); assert.equal(a[j+2],b[j+2]);
     }
     O.camEnu.set(8000,0,1000); wind.update(S,0);
     assert.deepEqual(geometry.attributes.aWidth.array,widths);
-    const before=calls; O.camEnu.set(60000,0,1000); wind.update(S,0.016);
+    O.camEnu.set(25000,0,1000); wind.update(S,0);
+    assert.ok(Array.from(geometry.attributes.aColor.array).some((v,i)=>i%4===3 && v>0.05));
+    S.cam='balloon'; O.camEnu.copy(S.enu); wind.update(S,0);
+    for (let i=0;i<geometry.instanceCount;i++) assert.ok(geometry.attributes.aWidth.array[i] <= 4.5);
+    S.cam='chase';
+    const before=calls; O.camEnu.set(80000,0,1000); wind.update(S,0.016);
     assert.equal(mesh.visible,false); assert.equal(calls,before);
   });
   const {createClouds} = await import(await load('clouds.js'));
@@ -82,7 +87,7 @@ if (!installed) {
     Object.assign(S.grid,{eMin:-96000,eMax:96000,nMin:-111000,nMax:111000,zMax:14000});
     const clouds = createClouds(S); clouds.onCase(S);
     const hook = O.frameHooks.at(-1), comp = O.scene.children.at(-1);
-    S.cam='orbit'; O.camEnu.set(0,0,61000); const before=O.renderer.calls;
+    S.cam='orbit'; O.camEnu.set(0,0,130000); const before=O.renderer.calls;
     hook(); assert.equal(comp.visible,false); assert.equal(O.renderer.calls,before);
     S.cam='balloon'; O.camEnu.copy(S.enu); hook();
     assert.equal(comp.visible,true); assert.equal(O.renderer.calls,before+1);

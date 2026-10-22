@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { clamp, mulberry32, rad } from "./util.js";
 
 import { cloudFade } from "./view-scale.js";
+import { CLOUD_DEPTH_FAR } from "./depth-pass.js";
 
 const params = new URLSearchParams(location.search);
 const SCALE = Number(params.get("clouds")) || 0.5;          // render resolution of the cloud pass relative to the screen
@@ -51,6 +52,9 @@ function noiseTexture(size = 64) {
 const FRAG = `
 precision highp float; precision highp sampler3D;
 uniform sampler3D uRH, uNoise, uWeather;
+uniform sampler2D uSceneDepth;
+uniform float uDepthFar;
+#include <packing>
 uniform vec3 uCam, uRight, uUp, uDir, uSun, uSunCol, uAmbTop, uAmbBot;
 uniform vec2 uGridMin, uGridSpan, uRes;
 uniform float uTanY, uAspect, uTime, uZMax, uGround, uHMin, uHMax, uCover, uDensity, uOpacity;
@@ -120,6 +124,9 @@ void main() {
       t0 = max(t0, min(a, b)); t1 = min(t1, max(a, b));
     }
   }
+  // Clip each ray to the balloon surface. Cloud behind it cannot wash over its silhouette.
+  float objectDistance = unpackRGBAToDepth(texture2D(uSceneDepth, vUv)) * uDepthFar;
+  t1 = min(t1, objectDistance);
   if (t1 <= t0) { gl_FragColor = vec4(0.0); return; }
   const int N = 96;
   float dt = (t1 - t0) / float(N);
@@ -154,7 +161,7 @@ export function createClouds(S) {
   const quadGeo = new THREE.PlaneGeometry(2, 2);
   const mat = new THREE.ShaderMaterial({
     glslVersion: null, depthTest: false, depthWrite: false,
-    uniforms: { uRH: { value: null }, uNoise: { value: null }, uWeather: { value: null }, uCam: { value: new THREE.Vector3() }, uRight: { value: new THREE.Vector3() }, uUp: { value: new THREE.Vector3() },
+    uniforms: { uSceneDepth: { value: O.depth.texture }, uDepthFar: { value: CLOUD_DEPTH_FAR }, uRH: { value: null }, uNoise: { value: null }, uWeather: { value: null }, uCam: { value: new THREE.Vector3() }, uRight: { value: new THREE.Vector3() }, uUp: { value: new THREE.Vector3() },
       uDir: { value: new THREE.Vector3() }, uSun: { value: new THREE.Vector3(0, 0, 1) }, uSunCol: { value: new THREE.Color(1, 1, 1) }, uAmbTop: { value: new THREE.Color() }, uAmbBot: { value: new THREE.Color() },
       uGridMin: { value: new THREE.Vector2() }, uGridSpan: { value: new THREE.Vector2() }, uRes: { value: new THREE.Vector2() }, uTanY: { value: 0.6 }, uAspect: { value: 1.6 }, uTime: { value: 0 },
       uOpacity: { value: 1 }, uDensity: { value: 1 }, uZMax: { value: 14000 }, uGround: { value: 150 }, uHMin: { value: 600 }, uHMax: { value: 13200 }, uCover: { value: 0 } },
@@ -169,7 +176,7 @@ export function createClouds(S) {
     uniforms: { tex: { value: rt.texture } },
     vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
     fragmentShader: "uniform sampler2D tex; varying vec2 vUv; void main(){ gl_FragColor = texture2D(tex, vUv); }" }));
-  comp.frustumCulled = false; comp.renderOrder = -10; comp.visible = false;
+  comp.frustumCulled = false; comp.renderOrder = 1000; comp.visible = false;
   O.scene.add(comp);
   mat.uniforms.uNoise.value = noiseTexture(64);
   // Cache non-repeating weather randomness once for inexpensive ray/light sampling.
@@ -182,7 +189,7 @@ export function createClouds(S) {
   weatherTex.unpackAlignment = 1; weatherTex.needsUpdate = true;
   mat.uniforms.uWeather.value = weatherTex;
   const st = { rhTex: null, vis: true, ready: false, lastRender: -Infinity,
-    camera: new THREE.Vector3(Infinity, 0, 0), dir: new THREE.Vector3(), up: new THREE.Vector3(), fov: 0, mode: null };
+    balloon: new THREE.Vector3(Infinity, 0, 0), camera: new THREE.Vector3(Infinity, 0, 0), dir: new THREE.Vector3(), up: new THREE.Vector3(), fov: 0, mode: null };
 
   O.frameHooks.push(() => {
     const fade = S.data && S.enu ? cloudFade(S.cam, O.camEnu.distanceTo(S.enu)) : 0;
@@ -193,12 +200,12 @@ export function createClouds(S) {
     const resized = rt.width !== w || rt.height !== h;
     if (resized) rt.setSize(w, h);
     const now = performance.now();
-    const stable = st.camera.distanceToSquared(O.camEnu) < 0.0001
+    const stable = st.camera.distanceToSquared(O.camEnu) < 0.0001 && st.balloon.distanceToSquared(S.enu) < 0.0001
       && st.dir.distanceToSquared(O.camBasis.dir) < 1e-12 && st.up.distanceToSquared(O.camBasis.up) < 1e-12
       && st.fov === O.camera.fov && st.mode === S.cam;
     // Reuse a stationary view for at most 33 ms; camera movement always renders immediately.
     if (!resized && stable && now - st.lastRender < 33) return;
-    st.lastRender = now; st.camera.copy(O.camEnu); st.dir.copy(O.camBasis.dir); st.up.copy(O.camBasis.up);
+    st.lastRender = now; st.balloon.copy(S.enu); st.camera.copy(O.camEnu); st.dir.copy(O.camBasis.dir); st.up.copy(O.camBasis.up);
     st.fov = O.camera.fov; st.mode = S.cam;
     const u = mat.uniforms, b = O.camBasis;
     u.uCam.value.copy(O.camEnu); u.uRight.value.copy(b.right); u.uUp.value.copy(b.up); u.uDir.value.copy(b.dir);
@@ -210,6 +217,7 @@ export function createClouds(S) {
     u.uAmbBot.value.setRGB(0.30, 0.33, 0.38).multiplyScalar(0.03 + 0.7 * k);
     u.uGround.value = S.data.meta.launch.ground_m;
     u.uDensity.value = S.cam === "balloon" ? 1.0 : 0.3;          // a thin veil on the map views, so the path and landing zone stay readable
+    O.depth.render(w, h);
     renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(rtScene, rtCam); renderer.setRenderTarget(null);
   });
 

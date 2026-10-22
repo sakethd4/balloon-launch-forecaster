@@ -39,21 +39,23 @@ Rendering fixes (2026-10-22):
   Terrain accuracy depends on the elevation tiles that have loaded.
 - Full visual quality is the default. `?adapt=1` opts into the previous automatic resolution/particle reductions.
   Optimizations reuse interpolation scratch buffers, avoid rebuilding paused flight geometry, throttle telemetry DOM
-  updates to 10 Hz, and skip cloud ray marching outside the forecast volume. Wind now samples 3,200 ribbons rather
+  updates to 10 Hz, and skip cloud ray marching outside the forecast volume. Wind now samples 2,560 ribbons rather
   than 9,000 streaks plus puffs; hidden fields skip CPU sampling and buffer uploads. Cloud textures are reused for up to
   33 ms only when the viewpoint is stationary; moving the camera renders immediately. Projection matrices update only
   when the field of view or aspect ratio changes.
 
-Checks: `node --test tests/viewer.test.mjs tests/viewer-render.test.mjs` (15 passing checks including terrain continuity/retries, imagery throttling, follow controls, camera transforms,
-balloon anchoring/scale, ribbon dimensions and hidden-field render/sampling skips). The four Three.js integration tests
+Checks: `node --test tests/viewer.test.mjs tests/viewer-render.test.mjs tests/viewer-camera.test.mjs` (18 passing checks including terrain continuity/retries, imagery throttling, follow controls, camera transforms,
+balloon anchoring/scale, ribbon dimensions and hidden-field render/sampling skips). The five Three.js integration tests
 use the app's pinned library in ignored `dist/viewer-check/three.mjs`; without it they report a skip. To obtain it:
 
 ```powershell
 New-Item -ItemType Directory -Force dist/viewer-check | Out-Null
 Invoke-WebRequest -Uri 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js' -OutFile 'dist/viewer-check/three.mjs'
+Invoke-WebRequest -Uri 'https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/Cesium.js' -OutFile 'dist/viewer-check/cesium.cjs'
 ```
 
-The renderer is stubbed in these tests: they exercise real Three.js geometry/matrices, not GPU shader compilation or
+Two additional camera tests use the pinned Cesium runtime above (and skip if it is missing).
+The renderer is stubbed in the Three.js tests: they exercise real Three.js geometry/matrices, not GPU shader compilation or
 visual quality. The Python suite passed all 45 tests during the preceding viewer fix; this follow-up changes only the viewer.
 All viewer JavaScript files pass syntax checks. No connected browser was available for visual QA; cloud appearance and
 real-GPU frame rate still need verification on the laptop. Suggested checks: Chase to inspect the balloon, then zoom
@@ -81,3 +83,23 @@ Follow/terrain maintenance (2026-10-22):
   refine as you move, especially on first visits or slow connections. GPU terrain appearance remains unverified because
   the browser tool reports Edge unavailable. Tests cover synthetic terrain edges and refinement, retry/throttling,
   selection transitions, follow button behavior, and the wider atmosphere visibility limits.
+
+Wind/camera/cloud-depth maintenance (2026-10-22):
+
+- Wind count reduced 20% at every preset (default 3,200 -> 2,560), with 10% lower opacity. A traveling, tapered
+  vertex wave and width flutter animate along each ribbon independently of the forecast advection; this motion is illustrative.
+- Chase now uses a controlled heading/pitch/range in the followed balloon's local east/north/up frame, with drag to orbit
+  and wheel to zoom. Pitch stays between -85 and +75 degrees, range between 120 m and 200 km. Terrain clearance clamps
+  the orbit state rather than letting Cesium tracking/collision/inertia fight each other. Leaving a manual mode clears
+  its camera transform and restores normal controls. Changing launch sites cancels old camera motion and resets the local frame.
+- Clouds have a balloon-geometry distance prepass. Their ray march stops at the visible balloon surface; clouds behind
+  the balloon no longer wash over it, while cloud between the camera and balloon can still obscure it. Invisible burst
+  flashes are excluded. This buffer is reused with the existing stationary-view cache and skipped when clouds are hidden.
+  It does not include Cesium terrain depth, and low-resolution cloud edges can still need GPU visual tuning.
+- Cloud placement uses real GFS forecast relative humidity on the 0.5-degree grid, resampled vertically every 500 m
+  up to 14 km. It is a local snapshot (roughly +/-2 degrees around the launch), not satellite cloud imagery or an observed
+  cloud map. Moisture above roughly 74% seeds procedural clouds. Fine outlines, billows, gaps and their slow animation are
+  illustrative. Dry forecast regions can have no cloud; straight outer edges or wide-zoom fades are display/data limits,
+  not real weather boundaries. Hover the Clouds layer label for this distinction.
+- Verification: 18 viewer checks pass, including real Cesium ground-limit/relocation tests and depth-pass isolation/state
+  restoration. JavaScript syntax checks pass. Browser/GPU shader appearance remains unverified in this session.

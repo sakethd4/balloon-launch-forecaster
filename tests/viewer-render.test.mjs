@@ -16,7 +16,7 @@ if (!installed) {
       setClearColor() {} setPixelRatio(v) {this.pr = v;} getPixelRatio() {return this.pr || 1;}
       setSize(w,h) {this.domElement.width=w; this.domElement.height=h;}
       setRenderTarget() {} clear() {}
-      render(scene,camera) {scene.updateMatrixWorld(true); camera.updateMatrixWorld(true); this.calls++;}
+      render(scene,camera) {if(this.beforeRender) this.beforeRender(scene,camera); scene.updateMatrixWorld(true); camera.updateMatrixWorld(true); this.calls++;}
     }
     export class PMREMGenerator {fromScene() {return {texture: new Texture()};} dispose() {}}
   `);
@@ -51,7 +51,7 @@ if (!installed) {
     sun:{k:1,el:45,az:180}, t:100, playing:false, timeScale:6};
   const {createBalloon} = await import(await load('balloon.js'));
   test('balloon stays anchored and keeps its world size when zoom changes', () => {
-    const balloon = createBalloon(S); const root = O.world.children.at(-1);
+    const balloon = createBalloon(S); const root = O.occluders.children.at(-1);
     balloon.update(S,0); const train = root.children[0];
     const scale = train.scale.clone(); const position = root.position.clone();
     O.camEnu.set(8000,0,1000); balloon.update(S,0);
@@ -63,7 +63,7 @@ if (!installed) {
     let calls = 0; S.grid = {at(lat,lon,alt,out) {calls++; out[0]=12;out[1]=4;out[2]=280;out[3]=70;}};
     O.camEnu.set(4000,0,1000);
     const wind = createWind(S); const mesh = O.world.children.at(-1);
-    wind.update(S,0.016); assert.equal(mesh.visible,true);
+    wind.update(S,0.016); assert.equal(mesh.visible,true); assert.equal(mesh.geometry.instanceCount,2560);
     const geometry = mesh.geometry, widths = geometry.attributes.aWidth.array.slice();
     const a = geometry.attributes.aHead.array, b = geometry.attributes.aTail.array;
     for (let i=0;i<geometry.instanceCount;i++) {
@@ -90,7 +90,30 @@ if (!installed) {
     S.cam='orbit'; O.camEnu.set(0,0,130000); const before=O.renderer.calls;
     hook(); assert.equal(comp.visible,false); assert.equal(O.renderer.calls,before);
     S.cam='balloon'; O.camEnu.copy(S.enu); hook();
-    assert.equal(comp.visible,true); assert.equal(O.renderer.calls,before+1);
+    assert.equal(comp.visible,true); assert.equal(O.renderer.calls,before+2);
+  });
+
+  test('cloud distance pass isolates balloon geometry, skips invisible flashes and restores scene state', () => {
+    const previous=O.scene.overrideMaterial, nonBalloon=O.world.children.filter(o=>o!==O.occluders);
+    const visibility=nonBalloon.map(o=>o.visible); let checked=false;
+    const flashes=[]; O.occluders.traverse(o=>{if(o.isMesh && o.material.transparent && o.material.opacity===0) flashes.push(o);});
+    const flashVisibility=flashes.map(o=>o.visible);
+    O.renderer.beforeRender=scene=>{
+      assert.ok(scene.overrideMaterial.isShaderMaterial);
+      assert.equal(scene.overrideMaterial.side,THREE.DoubleSide);
+      for(const object of nonBalloon) assert.equal(object.visible,false);
+      for(const flash of flashes) assert.equal(flash.visible,false);
+      checked=true;
+    };
+    O.depth.render(64,64); assert.equal(checked,true);
+    assert.equal(O.scene.overrideMaterial,previous);
+    assert.deepEqual(nonBalloon.map(o=>o.visible),visibility);
+    assert.deepEqual(flashes.map(o=>o.visible),flashVisibility);
+    O.renderer.beforeRender=()=>{throw Error('GPU error');};
+    assert.throws(()=>O.depth.render(64,64),/GPU error/);
+    assert.equal(O.scene.overrideMaterial,previous);
+    assert.deepEqual(nonBalloon.map(o=>o.visible),visibility);
+    delete O.renderer.beforeRender;
   });
 
 }

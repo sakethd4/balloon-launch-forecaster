@@ -131,6 +131,11 @@ function apply(data) {
   handlers.layers();
   ui.resetReadouts(); ui.renderSite(S); ui.renderOutcome(S); ui.renderTimeCard(S); ui.renderChart(S);
   S.modules.forEach((mod) => mod.onCase(S));
+  if (siteChanged && (S.cam === "chase" || S.cam === "balloon")) {
+    S.cameras.setMode(S.cam, { travelHeading: S.travelHeading(), sphere: S.sphere, bearing: S.bearing });
+    S.flight.position(S.follow, S.t, S.pos);
+    S.cameras.update(S.pos, performance.now() / 1000, m.launch.ground_m);
+  }
   if (siteChanged && (S.cam === "orbit" || S.cam === "top")) S.cameras.frame(S.sphere, S.bearing, S.cam, first ? 0 : 1.8);
 }
 
@@ -168,7 +173,7 @@ function frame() {
   S.sun = { el: sp.el, az: sp.az, k };
   if (Math.abs(k - S.dayK) > 0.01) { S.dayK = k; setDaylight(S.earth, k, sp.el); }
   S.earth.viewer.clock.currentTime = C.JulianDate.fromDate(date);
-  S.cameras.update(S.pos, performance.now() / 1000);
+  S.cameras.update(S.pos, performance.now() / 1000, S.data.meta.launch.ground_m);
   S.overlay.ecefToEnu(S.pos, S.enu || (S.enu = new THREE.Vector3()));
   S.timeScale = S.playing ? S.speed : 6;                         // wind and birds keep drifting a little when paused
   S.dt = dt;

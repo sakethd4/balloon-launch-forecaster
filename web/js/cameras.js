@@ -10,14 +10,19 @@ export class Cameras {
     this.mode = "orbit";
     this.look = { heading: 0, pitch: rad(-12), fov: 100 };      // balloon cam: look direction (rad) and horizontal field of view (deg)
     this.followPos = new C.Cartesian3();
-    this.followEntity = earth.viewer.entities.add({ position: new C.CallbackProperty(() => this.followPos, false), point: { pixelSize: 0 } });
+    this.chase = { heading: 0, pitch: rad(-17), range: 1780 };
     this.defaultFov = earth.camera.frustum.fov;
     this.drag = null;
     this.sway = { on: true };
     const canvas = earth.viewer.canvas;
-    canvas.addEventListener("pointerdown", (e) => { if (this.mode !== "balloon") return; this.drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); });
+    canvas.addEventListener("pointerdown", (e) => { if (this.mode !== "balloon" && this.mode !== "chase") return; this.drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); });
     canvas.addEventListener("pointermove", (e) => {
-      if (this.mode !== "balloon" || !this.drag) return;
+      if (!this.drag || (this.mode !== "balloon" && this.mode !== "chase")) return;
+      if (this.mode === "chase") {
+        this.chase.heading -= (e.clientX - this.drag.x) * 0.004;
+        this.chase.pitch = clamp(this.chase.pitch + (e.clientY - this.drag.y) * 0.004, rad(-85), rad(75));
+        this.drag = { x: e.clientX, y: e.clientY }; return;
+      }
       const k = rad(this.look.fov) / canvas.clientWidth;                                       // radians of view per pixel dragged
       this.look.heading = (this.look.heading - (e.clientX - this.drag.x) * k + 2 * Math.PI) % (2 * Math.PI);
       this.look.pitch = clamp(this.look.pitch + (e.clientY - this.drag.y) * k, rad(-89), rad(89));
@@ -25,7 +30,12 @@ export class Cameras {
     });
     const end = () => { this.drag = null; };
     canvas.addEventListener("pointerup", end); canvas.addEventListener("pointercancel", end);
-    canvas.addEventListener("wheel", (e) => { if (this.mode !== "balloon") return; e.preventDefault(); this.look.fov = clamp(this.look.fov * (1 + Math.sign(e.deltaY) * 0.08), 40, 120); }, { passive: false });
+    canvas.addEventListener("wheel", (e) => {
+      if (this.mode !== "balloon" && this.mode !== "chase") return;
+      e.preventDefault();
+      if (this.mode === "chase") this.chase.range = clamp(this.chase.range * Math.exp(Math.sign(e.deltaY) * 0.12), 120, 200000);
+      else this.look.fov = clamp(this.look.fov * (1 + Math.sign(e.deltaY) * 0.08), 40, 120);
+    }, { passive: false });
     window.addEventListener("keydown", (e) => {
       if (this.mode !== "balloon" || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
       const s = rad(3);
@@ -38,6 +48,7 @@ export class Cameras {
   frame(sphere, bearingRad, mode, duration = 1.6) {
     const { camera, viewer } = this.earth;
     viewer.trackedEntity = undefined;
+    camera.cancelFlight(); camera.lookAtTransform(C.Matrix4.IDENTITY);
     const side = bearingRad + Math.PI / 2;
     const pose = mode === "top" ? new C.HeadingPitchRange(0, rad(-90), sphere.radius * 3.4) : new C.HeadingPitchRange(side, rad(-27), sphere.radius * 3.1);
     camera.flyToBoundingSphere(sphere, { offset: pose, duration });
@@ -45,26 +56,43 @@ export class Cameras {
 
   setMode(mode, ctx) {
     const { viewer, camera, scene } = this.earth, ctrl = scene.screenSpaceCameraController, prev = this.mode;
-    this.mode = mode;
-    if (prev === "balloon") {                                                                  // leaving the balloon cam: restore normal controls
-      ctrl.enableInputs = true; viewer.__boundsOff = false; camera.frustum.fov = this.defaultFov;
+    this.mode = mode; this.drag = null;
+    camera.cancelFlight();
+    // Tracked/local transforms must not leak into a new mode or launch location.
+    viewer.trackedEntity = undefined; camera.lookAtTransform(C.Matrix4.IDENTITY);
+    if (prev === "balloon" || prev === "chase") { // Restore Cesium controls after either manual camera.
+      ctrl.enableInputs = true; viewer.__boundsOff = false; if (prev === "balloon") camera.frustum.fov = this.defaultFov;
     }
-    viewer.trackedEntity = undefined;
     if (mode === "balloon") {
       ctrl.enableInputs = false; viewer.__boundsOff = true; this.defaultFov = camera.frustum.fov;
       this.look.heading = rad(ctx.travelHeading); this.look.pitch = rad(-10);
     } else if (mode === "chase") {
-      const b = rad(ctx.travelHeading), back = 1700;
-      this.followEntity.viewFrom = new C.Cartesian3(-Math.sin(b) * back, -Math.cos(b) * back, 520);
-      viewer.trackedEntity = this.followEntity;
+      ctrl.enableInputs = false; viewer.__boundsOff = true;
+      this.chase = { heading: rad(ctx.travelHeading), pitch: rad(-17), range: 1780 };
     } else {
       this.frame(ctx.sphere, ctx.bearing, mode, prev === "orbit" || prev === "top" ? 1.2 : 2.0);
     }
   }
 
   /** Called every frame before Cesium renders. `pos` is the followed balloon's Earth-fixed position. */
-  update(pos, time) {
+  update(pos, time, fallbackGround = 0) {
     C.Cartesian3.clone(pos, this.followPos);
+    if (this.mode === "chase") {
+      const { camera, scene } = this.earth, target = C.Cartographic.fromCartesian(pos);
+      this.chase.pitch = clamp(this.chase.pitch, rad(-85), rad(75));
+      this.chase.range = clamp(this.chase.range, 120, 200000);
+      for (let pass = 0; pass < 3; pass++) {
+        camera.lookAt(pos, new C.HeadingPitchRange(this.chase.heading, this.chase.pitch, this.chase.range));
+        const c = C.Cartographic.fromCartesian(camera.positionWC), terrain = scene.globe.getHeight(c) ?? fallbackGround;
+        const reference = scene.verticalExaggerationRelativeHeight ?? 0;
+        const floor = reference + (terrain - reference) * scene.verticalExaggeration + 4;
+        if (c.height >= floor) break;
+        // Clamp the orbit state itself: dragging away from the ground responds immediately, without inertia or flips.
+        const limit = Math.asin(clamp((target.height - floor) / this.chase.range, -0.999, 0.999));
+        this.chase.pitch = clamp(Math.min(this.chase.pitch, limit - 0.002), rad(-85), rad(75));
+      }
+      return;
+    }
     if (this.mode !== "balloon") return;
     const { camera } = this.earth, up = C.Cartesian3.normalize(pos, new C.Cartesian3());
     const dest = C.Cartesian3.add(pos, C.Cartesian3.multiplyByScalar(up, 0.45, new C.Cartesian3()), new C.Cartesian3());

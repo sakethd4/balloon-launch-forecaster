@@ -165,3 +165,17 @@ heightmap cache 300, max 6 heightmap jobs, sibling/ancestor preloading. No paid 
 still expected; GPU visual quality unverified (browser tool reports Edge unavailable).
 Verification: 15 Node checks pass, including terrain seams/refinement, missing-tile retries, imagery throttle semantics,
 follow controls and selection during following; all JS syntax checks pass. No backend/model changes.
+
+### Wind/chase/cloud occlusion maintenance (2026-10-22)
+
+Wind presets reduced 20% (default 2,560 ribbons), opacity reduced 10%, and a traveling vertex wave/width flutter added.
+Chase no longer uses a tracked entity: explicit ENU heading/pitch/range, drag/wheel controls, pitch -85..75 degrees,
+range 120 m..200 km. Clamp pitch against exaggerated terrain clearance; no Cesium collision/inertia fighting tracking.
+Mode changes cancel camera flights/reset to identity; site changes reinitialize chase/payload context and position.
+Cloud rays now stop at a balloon-only packed-distance prepass, then composite after geometry. Exclude invisible flashes;
+restore visibility/material/target state even on errors. Depth prepass uses both faces and logarithmic depth; no Cesium
+terrain-depth sharing. Cloud cache also invalidates when balloon position changes. Field remains forecast RH on a local
+9x9x29 grid (+/-2 deg, 0.5 deg, every 500 m to 14 km) with procedural fine shape, not live/observed cloud cover.
+Outer data/zoom fades are artificial boundaries; interior gaps may be humidity-driven or procedural. Layer tooltip and
+web/README.md explain this. 18 Node checks pass using pinned Three.js and Cesium (renderer stubbed; camera math real),
+including chase terrain limits/relocation and occluder state restoration. GPU appearance/shader compilation unverified.

@@ -4,6 +4,7 @@
 // relative to the camera, which sits at the origin.
 import * as THREE from "three";
 import { deg, rad } from "./util.js";
+import { createOccluderDepth } from "./depth-pass.js";
 
 const C = window.Cesium;
 
@@ -25,9 +26,11 @@ export function createOverlay(earth) {
 
   const sun = new THREE.DirectionalLight(0xffffff, 2.5), hemi = new THREE.HemisphereLight(0xbcd8ff, 0x4a4338, 0.8);
   world.add(sun, sun.target, hemi);
+  const occluders = new THREE.Group(); world.add(occluders);
 
-  const O = { renderer, scene: scene3, world, camera: cam3, sun, hemi, canvas, frameHooks: [], anchor: null, R: new THREE.Matrix4(), cam: new C.Cartesian3(), camEnu: new THREE.Vector3(),
+  const O = { renderer, scene: scene3, world, occluders, camera: cam3, sun, hemi, canvas, frameHooks: [], anchor: null, R: new THREE.Matrix4(), cam: new C.Cartesian3(), camEnu: new THREE.Vector3(),
     camBasis: { right: new THREE.Vector3(), up: new THREE.Vector3(), dir: new THREE.Vector3() }, enuA: null };
+  O.depth = createOccluderDepth(O);
 
   /** Set the local frame's origin (the launch point on the ground) and the matrix that turns ENU into Earth-fixed axes. */
   O.setAnchor = (lat, lon) => {
@@ -87,8 +90,8 @@ export function createOverlay(earth) {
   O.render = () => {
     if (!O.anchor) return;
     O.sync();
-    for (const hook of O.frameHooks) hook(O);
     scene3.updateMatrixWorld(true);
+    for (const hook of O.frameHooks) hook(O);
     renderer.render(scene3, cam3);
   };
   scene.postRender.addEventListener(O.render);

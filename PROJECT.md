@@ -147,3 +147,10 @@ Removed the title/follow bubble and lowered the left cards. Restored humid cloud
 visibility while preserving payload wind. Using the same free map sources, terrain now shares the source tiling,
 interpolates shared borders, retains parent surfaces on failed downloads, and caches/preloads tiles for smoother movement.
 Streaming detail still refines progressively; 15 automated viewer checks pass, with real-GPU visual checks pending.
+
+
+Wind/chase maintenance: wind is 20% less dense, 10% more transparent and visibly flutters along each ribbon. Chase uses
+bounded local camera controls with terrain clearance and resets correctly when launch locations change. Cloud rays
+clip against balloon geometry to preserve front/behind ordering. Clouds are inferred from real GFS humidity snapshots;
+fine shapes and gaps are procedural, and outer coverage/fade edges are display limits, not observed weather fronts.
+Eighteen viewer checks pass, including the actual Cesium camera math; GPU visual verification remains pending.

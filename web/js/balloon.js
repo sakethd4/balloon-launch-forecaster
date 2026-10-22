@@ -86,7 +86,7 @@ function makeChute() {
 
 export function createBalloon(S) {
   const O = S.overlay, root = new THREE.Group(), train = new THREE.Group(), sway = new THREE.Group();
-  root.visible = false; O.world.add(root); root.add(train); train.add(sway);
+  root.visible = false; O.occluders.add(root); root.add(train); train.add(sway);
   const payload = makePayload(), env = makeEnvelope(), chute = makeChute();
   const line = new THREE.Mesh(new THREE.CylinderGeometry(0.0013, 0.0013, 1, 6), new THREE.MeshStandardMaterial({ color: 0xcfd3d8, roughness: 0.6 }));
   line.rotation.x = Math.PI / 2;                                           // cylinder axis Y -> Z

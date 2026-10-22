@@ -5,7 +5,7 @@ import { EARTH_R, clamp, smoothstep, tempColor } from "./util.js";
 import { windFade } from "./view-scale.js";
 
 const params = new URLSearchParams(location.search);
-const COUNT = ({ low: 1800, mid: 3200, high: 5000 })[params.get("q")] || 3200;
+const COUNT = Math.round(0.8 * (({ low: 1800, mid: 3200, high: 5000 })[params.get("q")] || 3200));
 
 export function createWind(S) {
   const O = S.overlay, geo = new THREE.InstancedBufferGeometry();
@@ -23,6 +23,7 @@ export function createWind(S) {
     uniforms: { uTime: { value: 0 } },
     vertexShader: `
       attribute vec3 aTail, aHead; attribute vec4 aColor; attribute float aWidth, aBend;
+      uniform float uTime;
       varying vec2 vUv; varying vec4 vColor;
       void main() {
         vec4 a = modelViewMatrix * vec4(aTail, 1.0), b = modelViewMatrix * vec4(aHead, 1.0);
@@ -31,7 +32,10 @@ export function createWind(S) {
         vec2 normal = vec2(-tangent.y, tangent.x) / max(length(tangent), 0.001);
         vec4 p = mix(a, b, s);
         // Bend the centre line; width and curvature remain in world metres.
-        p.xy += normal * (sin(s * 3.14159265) * aBend + position.y * aWidth);
+        float phase = dot(aHead.xy, vec2(0.0013, 0.0017));
+        float wave = sin(s * 12.5663706 - uTime * 2.4 + phase) * aWidth * 1.8;
+        float envelope = sin(s * 3.14159265);
+        p.xy += normal * (envelope * (aBend + wave) + position.y * aWidth * (0.85 + 0.15 * cos(s * 9.0 - uTime * 1.8 + phase)));
         gl_Position = projectionMatrix * p;
         if (a.z > -0.5 || b.z > -0.5) gl_Position = vec4(3, 3, 3, 1);
         vUv = vec2(s, position.y * 2.0); vColor = aColor;
@@ -101,7 +105,7 @@ export function createWind(S) {
         const lifeFade = Math.min(age[i] / 1.5, (life[i] - age[i]) / 2, 1);
         const altitudeFade = smoothstep(ground + 25, ground + 160, alt) * (1 - smoothstep(13700, 14200, alt));
         colors[k + 3] = fade * lifeFade * altitudeFade * smoothstep(15, 100, dist)
-          * (1 - smoothstep(radius * 0.7, radius * 1.6, ride ? dist : fieldDist)) * (ride ? 0.32 : 0.55);
+          * (1 - smoothstep(radius * 0.7, radius * 1.6, ride ? dist : fieldDist)) * (ride ? 0.288 : 0.495);
       }
       reset = false;
       for (const attribute of attributes) {

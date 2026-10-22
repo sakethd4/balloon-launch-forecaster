@@ -65,9 +65,9 @@ These are the baselines our ML must beat. Caveats: the soundings are 270+ km fro
 
 Also under consideration: analog forecasts (finding past days that looked like the coming one and showing how flights went), and an ERA5 climatology of flights from each candidate site across decades.
 
-## The launch-planner app (planned)
+## The launch-planner app (first version built)
 
-A website where the simulator runs in the browser, so sliders update instantly:
+The first version runs simulations on a local Python server and displays the results in a CesiumJS/Three.js browser viewer. It supports launch location/hour selection, terrain, probability rings, clickable possible flights, and orbit, chase, payload and top cameras. Site ranking and the additional controls below remain planned:
 
 - Click the map to set the launch site. The flight path is colored by altitude, with the burst point and landing marked, plus the landing probability zone.
 - Controls for launch date and hour, ascent rate, burst altitude and descent rate.
@@ -83,8 +83,8 @@ Open decisions: who uses it and how it is shared (local only, a private link, or
 |---|---|---|
 | NOAA GFS forecasts (AWS open data), 0.5°, 12Z run, 21 steps, 1000–100 hPa | Forecast winds; the simulator's input | Done: 2021-03-22 to 2026-10-18, 4.5 GB |
 | NOAA IGRA radiosonde soundings, four stations | Ground truth for winds aloft | Done: full history |
-| SondeHub open telemetry | Real flight tracks | Planned |
-| GEFS ensemble forecasts | Predicting how uncertain a day is | Planned |
+| SondeHub open telemetry | Real flight tracks | Collected and evaluated |
+| GEFS ensemble forecasts | Predicting how uncertain a day is | Collected; spread used in learned error model |
 | ERA5 reanalysis (optional) | Winds over Austin itself; climatology | Possible later |
 | The club's own flights | The final test | When available |
 
@@ -104,14 +104,14 @@ Data lives outside the project folder (`~/balloon-data`). Large downloads run on
 | Data pipeline (GFS, soundings) | Done and verified |
 | 1D and 4D flight simulators | Done, 21 tests passing |
 | Forecast-vs-sounding baseline and bias baseline | Done |
-| Real-track validation (SondeHub) | Next |
-| Learned uncertainty | After that |
-| Web app | After the uncertainty layer, with a first version possible earlier |
+| Real-track validation (SondeHub) | Built; simulator and landing-zone checks completed |
+| Learned uncertainty | First calibrated model built; gains over lead-time baseline are modest (see CLAUDE.md) |
+| Web app | First local version built; viewer fixes implemented 2026-10-22, visual/GPU verification pending |
 
 ## Risks and open questions
 
 - **ML gains may be modest.** The forecast is already good. The value we expect is calibrated uncertainty, and we will report it honestly either way.
-- **No terrain data.** The simulator assumes flat ground, which affects the landing altitude and the lowest wind layers.
+- **Terrain remains approximate.** The app uses real elevation tiles for launch ground height and displayed terrain; it does not simulate terrain-following winds or detailed landing obstacles.
 - **Fill volume and real balloon behavior are unknown.** Real ascent rate, burst altitude and descent rate vary with the fill, temperature and balloon quality.
 - **Soundings are not at Austin.** ERA5 or real tracks could close this gap.
 - **GFS model updates** after March 2021 may change the error behavior. We still need to check their dates.
@@ -123,3 +123,12 @@ Data lives outside the project folder (`~/balloon-data`). Large downloads run on
 - Modeling and evaluation
 - Web app and visualization
 - Flight lead: balloon specs, launch criteria, regulatory constraints
+
+### Viewer maintenance (2026-10-22)
+
+Implemented fixes for zoom-dependent balloon scale/position, bright overlapping launch markers and wind particles,
+cloud visibility/stability, followed projected routes and underground cameras. Default visual quality is preserved;
+performance work removes repeated allocations, paused geometry updates and excess telemetry DOM work. Adaptive quality
+reductions are opt-in. Cloud shapes are illustrative within forecast humidity, and camera clearance depends on loaded
+terrain. Browser visual checks and laptop GPU measurements are pending; implementation and verification details are in
+web/README.md and CLAUDE.md.

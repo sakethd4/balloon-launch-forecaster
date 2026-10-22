@@ -134,9 +134,9 @@ function apply(data) {
 }
 
 /* ------------------------------------------------------------------ per-frame */
-// Keep it smooth on any machine: if frames take too long, lower the cloud resolution and particle count; raise them again when there is headroom.
+// Optional adaptive quality (?adapt=1). Default rendering preserves full resolution and particle counts.
 function adaptQuality(dt) {
-  if (params.get("adapt") === "0") return;
+  if (params.get("adapt") !== "1") return;
   S.frameMs += (dt * 1000 - S.frameMs) * 0.06;
   const now = performance.now();
   if (now < S.adaptAt) return;
@@ -171,7 +171,11 @@ function frame() {
   S.overlay.ecefToEnu(S.pos, S.enu || (S.enu = new THREE.Vector3()));
   S.timeScale = S.playing ? S.speed : 6;                         // wind and birds keep drifting a little when paused
   S.dt = dt;
+  S.earth.enforceClearance();
+  S.overlay.sync();
   for (const mod of S.modules) mod.update(S, dt);
+  if (now - (S.lastReadout || 0) < 100) return;
+  S.lastReadout = now;
   ui.updateReadouts(S, { alt, vert: S.cur.vert, side: sideKmh, dist: kmBetween(S.site.lat, S.site.lon, lat, lon), sunEl: sp.el, heading: S.cam === "balloon" ? S.cameras.headingDeg : S.heading });
 }
 

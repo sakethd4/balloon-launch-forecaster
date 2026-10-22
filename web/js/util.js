@@ -87,6 +87,8 @@ export class Grid {
     this.dz = g.alt_m[1] - g.alt_m[0]; this.dlat = g.lat[1] - g.lat[0]; this.dlon = g.lon[1] - g.lon[0];
     const flat = (a) => Float32Array.from(a.flat(2));
     this.u = flat(g.u); this.v = flat(g.v); this.t = flat(g.t); this.rh = flat(g.rh);
+    // Reused by the synchronous particle sampler: avoid two allocations per particle per frame.
+    this.weights = new Float64Array(8); this.offsets = new Int32Array(8);
     this.cosLat = Math.cos(rad(lat0));
     this.eMin = (g.lon[0] - lon0) * 111195 * this.cosLat; this.eMax = (g.lon.at(-1) - lon0) * 111195 * this.cosLat;
     this.nMin = (g.lat[0] - lat0) * 111195; this.nMax = (g.lat.at(-1) - lat0) * 111195;
@@ -98,9 +100,13 @@ export class Grid {
     const fz = clamp(alt / this.dz, 0, this.nz - 1.001);
     const z = fz | 0, y = fy | 0, x = fx | 0, tz = fz - z, ty = fy - y, tx = fx - x, nx = this.nx, ny = this.ny, s = nx * ny;
     const i0 = z * s + y * nx + x;
-    const w = [(1 - tz) * (1 - ty) * (1 - tx), (1 - tz) * (1 - ty) * tx, (1 - tz) * ty * (1 - tx), (1 - tz) * ty * tx,
-      tz * (1 - ty) * (1 - tx), tz * (1 - ty) * tx, tz * ty * (1 - tx), tz * ty * tx];
-    const o = [i0, i0 + 1, i0 + nx, i0 + nx + 1, i0 + s, i0 + s + 1, i0 + s + nx, i0 + s + nx + 1];
+    const w = this.weights, o = this.offsets;
+    w[0] = (1 - tz) * (1 - ty) * (1 - tx); w[1] = (1 - tz) * (1 - ty) * tx;
+    w[2] = (1 - tz) * ty * (1 - tx); w[3] = (1 - tz) * ty * tx;
+    w[4] = tz * (1 - ty) * (1 - tx); w[5] = tz * (1 - ty) * tx;
+    w[6] = tz * ty * (1 - tx); w[7] = tz * ty * tx;
+    o[0] = i0; o[1] = i0 + 1; o[2] = i0 + nx; o[3] = i0 + nx + 1;
+    o[4] = i0 + s; o[5] = i0 + s + 1; o[6] = i0 + s + nx; o[7] = i0 + s + nx + 1;
     let u = 0, v = 0, t = 0, rh = 0;
     for (let k = 0; k < 8; k++) { u += this.u[o[k]] * w[k]; v += this.v[o[k]] * w[k]; t += this.t[o[k]] * w[k]; rh += this.rh[o[k]] * w[k]; }
     out[0] = u; out[1] = v; out[2] = t; out[3] = rh; return out;

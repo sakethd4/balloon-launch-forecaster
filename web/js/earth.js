@@ -183,7 +183,21 @@ export function createEarth(region) {
       camera.setView({ destination: C.Cartesian3.fromDegrees(lon, lat, h), orientation: { heading: camera.heading, pitch: camera.pitch, roll: camera.roll } });
   });
 
-  return { viewer, scene, camera, Cesium: C };
+  // Controller collision checks do not cover tracked entities or programmatic setView calls.
+  function enforceClearance() {
+    const c = C.Cartographic.fromCartesian(camera.positionWC);
+    const terrain = scene.globe.getHeight(c) ?? 0;
+    const reference = scene.verticalExaggerationRelativeHeight ?? 0;
+    const floor = reference + (terrain - reference) * scene.verticalExaggeration + 2;
+    if (c.height >= floor) return;
+    c.height = floor;
+    const corrected = C.Cartesian3.fromRadians(c.longitude, c.latitude, c.height);
+    // Move in world coordinates while preserving the tracked camera's local transform and orientation.
+    const delta = C.Cartesian3.subtract(corrected, camera.positionWC, new C.Cartesian3());
+    const local = C.Matrix4.multiplyByPointAsVector(camera.inverseTransform, delta, new C.Cartesian3());
+    C.Cartesian3.add(camera.position, local, camera.position);
+  }
+  return { viewer, scene, camera, enforceClearance, Cesium: C };
 }
 
 /** Night dims the imagery, sky and haze; day restores them. k in [0, 1]. */

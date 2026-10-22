@@ -54,42 +54,67 @@ uniform vec2 uGridMin, uGridSpan, uRes;
 uniform float uTanY, uAspect, uTime, uZMax, uGround, uHMin, uHMax, uCover, uDensity;
 varying vec2 vUv;
 const float R_EARTH = 6371000.0;
-float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233)) + uTime) * 43758.5453); }
+float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 float heightOf(vec3 p) { return p.z + (p.x * p.x + p.y * p.y) / (2.0 * R_EARTH); }
 float coverage(vec3 p, float h) {
   float z = h / uZMax; if (z < 0.0 || z > 1.0) return 0.0;
-  vec2 g = clamp((p.xy - uGridMin) / uGridSpan, 0.0, 1.0);
+  vec2 g = (p.xy - uGridMin) / uGridSpan;
+  vec2 edge = smoothstep(vec2(0.0), vec2(0.12), g) * (1.0 - smoothstep(vec2(0.88), vec2(1.0), g));
   float rh = texture(uRH, vec3(g, z)).r;
-  return smoothstep(0.74 - uCover, 0.985 - uCover * 0.5, rh);
+  return smoothstep(0.74 - uCover, 0.985 - uCover * 0.5, rh) * edge.x * edge.y;
 }
 float density(vec3 p, float h, bool detail) {
   float base = coverage(p, h);
   if (base <= 0.0) return 0.0;
   vec3 q = (p + vec3(uTime * 7.0, uTime * 3.0, 0.0)) * vec3(1.0, 1.0, 2.0);
   vec2 n1 = texture(uNoise, q / 11000.0).rg;
-  float shape = n1.r;
-  float d = base * 0.95 + (shape - 0.5) * 0.85 - 0.12;
+  // Humidity controls the fraction occupied by billows instead of making a uniform sheet.
+  float shape = n1.r * 0.7 + n1.g * 0.3;
+  float d = (shape - (0.72 - base * 0.5)) / 0.4;
   if (detail) { vec2 n2 = texture(uNoise, q / 2300.0).rg; d += (n2.g - 0.45) * 0.38 * (1.0 - base * 0.4); d -= (n2.r - 0.5) * 0.15; }
-  float fadeTop = smoothstep(uHMax, uHMax - 1500.0, h), fadeBot = smoothstep(uHMin, uHMin + 500.0, h);
+  float fadeTop = (1.0 - smoothstep(uHMax - 1500.0, uHMax, h)), fadeBot = smoothstep(uHMin, uHMin + 500.0, h);
   return clamp(d * 1.7, 0.0, 1.0) * fadeTop * fadeBot;
 }
 float hg(float c, float g) { float g2 = g * g; return (1.0 - g2) / (4.0 * 3.14159 * pow(1.0 + g2 - 2.0 * g * c, 1.5)); }
+// Intersect the same curved height field used by density to avoid grazing-angle popping.
+vec2 heightRoots(vec3 ro, vec3 rd, float height) {
+  float a = dot(rd.xy, rd.xy) / (2.0 * R_EARTH);
+  float b = rd.z + dot(ro.xy, rd.xy) / R_EARTH;
+  float c = heightOf(ro) - height;
+  if (a < 1e-12) {
+    if (abs(b) < 1e-7) return c < 0.0 ? vec2(-2e7, 2e7) : vec2(2e7, -2e7);
+    float t = -c / b;
+    return b > 0.0 ? vec2(-2e7, t) : vec2(t, 2e7);
+  }
+  float disc = b * b - 4.0 * a * c;
+  if (disc < 0.0) return vec2(2e7, -2e7);
+  float q = -0.5 * (b + (b >= 0.0 ? 1.0 : -1.0) * sqrt(disc));
+  float x = q / a, y = abs(q) > 1e-12 ? c / q : x;
+  return vec2(min(x, y), max(x, y));
+}
 void main() {
   vec2 uv = vUv * 2.0 - 1.0;
   vec3 rd = normalize(uDir + uRight * (uv.x * uTanY * uAspect) + uUp * (uv.y * uTanY));
   vec3 ro = uCam;
-  float tMax = 80000.0;
-  // keep inside the cloud slab: flat approximation for the entry/exit, curvature is applied in the density itself
-  float hc = heightOf(ro), t0 = 0.0, t1 = tMax;
-  if (abs(rd.z) < 1e-4) { if (hc < uHMin || hc > uHMax) { gl_FragColor = vec4(0.0); return; } }
-  else {
-    float a = (uHMin - hc) / rd.z, b = (uHMax - hc) / rd.z;
-    t0 = max(min(a, b), 0.0); t1 = min(max(a, b), tMax);
-    if (t1 <= t0) { gl_FragColor = vec4(0.0); return; }
+  vec2 outer = heightRoots(ro, rd, uHMax), inner = heightRoots(ro, rd, uHMin);
+  float t0 = max(outer.x, 0.0), t1 = min(outer.y, 1500000.0);
+  if (inner.x <= t0 && inner.y > t0) t0 = inner.y;
+  else if (inner.x > t0) t1 = min(t1, inner.x);
+  // Skip empty space outside the forecast grid before the expensive march.
+  for (int axis = 0; axis < 2; axis++) {
+    if (abs(rd[axis]) < 1e-7) {
+      if (ro[axis] < uGridMin[axis] || ro[axis] > uGridMin[axis] + uGridSpan[axis]) { gl_FragColor = vec4(0.0); return; }
+    } else {
+      float a = (uGridMin[axis] - ro[axis]) / rd[axis];
+      float b = (uGridMin[axis] + uGridSpan[axis] - ro[axis]) / rd[axis];
+      t0 = max(t0, min(a, b)); t1 = min(t1, max(a, b));
+    }
   }
-  const int N = 64;
-  float g = 1.062, dt0 = (t1 - t0) * (g - 1.0) / (pow(g, float(N)) - 1.0);
-  float t = t0 + dt0 * hash(gl_FragCoord.xy) * 0.8, dt = dt0;
+  if (t1 <= t0) { gl_FragColor = vec4(0.0); return; }
+  const int N = 96;
+  float dt = (t1 - t0) / float(N);
+  // Stable samples remove animated noise; animation comes from the cloud field itself.
+  float t = t0 + dt * (0.35 + 0.3 * hash(gl_FragCoord.xy));
   vec3 col = vec3(0.0); float T = 1.0;
   float cosS = dot(rd, uSun), phase = mix(hg(cosS, 0.62), hg(cosS, -0.25), 0.3);
   for (int i = 0; i < N; i++) {
@@ -108,9 +133,9 @@ void main() {
       col += T * (sunL + amb) * (1.0 - dT) * haze;
       T *= dT;
     }
-    t += dt; dt *= g;
+    t += dt;
   }
-  col = 1.0 - exp(-col * 1.15);                                // soft tone map
+  col = (1.0 - exp(-col / max(1.0 - T, 0.001) * 1.15)) * (1.0 - T);                                // soft tone map
   gl_FragColor = vec4(col, 1.0 - T);                           // premultiplied
 }`;
 
@@ -146,14 +171,14 @@ export function createClouds(S) {
     if (rt.width !== w || rt.height !== h) rt.setSize(w, h);
     const u = mat.uniforms, b = O.camBasis;
     u.uCam.value.copy(O.camEnu); u.uRight.value.copy(b.right); u.uUp.value.copy(b.up); u.uDir.value.copy(b.dir);
-    u.uTanY.value = Math.tan(rad(O.camera.fov) / 2); u.uAspect.value = O.camera.aspect; u.uTime.value = (performance.now() / 1000) % 600; u.uRes.value.set(w, h);
+    u.uTanY.value = Math.tan(rad(O.camera.fov) / 2); u.uAspect.value = O.camera.aspect; u.uTime.value = performance.now() / 1000; u.uRes.value.set(w, h);
     const sd = O.sunDirection(S.sun.el, S.sun.az), k = S.sun.k, dusk = clamp(1 - Math.abs(S.sun.el - 3) / 14, 0, 1);
     u.uSun.value.copy(sd);
     u.uSunCol.value.setRGB(1.0, 0.93 - 0.3 * dusk, 0.8 - 0.5 * dusk).multiplyScalar(k * (0.25 + 0.75 * clamp(S.sun.el / 20, 0, 1)));
     u.uAmbTop.value.setRGB(0.52, 0.64, 0.86).multiplyScalar(0.05 + 0.95 * k).lerp(new THREE.Color(1.0, 0.62, 0.45), dusk * 0.3 * k);
     u.uAmbBot.value.setRGB(0.30, 0.33, 0.38).multiplyScalar(0.03 + 0.7 * k);
     u.uGround.value = S.data.meta.launch.ground_m;
-    u.uDensity.value = S.cam === "balloon" ? 1.0 : 0.085;          // a thin veil on the map views, so the path and landing zone stay readable
+    u.uDensity.value = S.cam === "balloon" ? 1.0 : 0.3;          // a thin veil on the map views, so the path and landing zone stay readable
     renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(rtScene, rtCam); renderer.setRenderTarget(null);
   });
 

@@ -1,14 +1,12 @@
 // The balloon as a real 3D object: latex envelope that swells as the air thins, string, payload box and a folded parachute;
-// at burst the envelope pops (flash, shreds of latex) and the parachute opens. Sizes are in metres (real scale up close,
-// scaled up with camera distance so the balloon stays visible from far away). Envelope size is illustrative: the fill
+// at burst the envelope pops (flash, shreds of latex) and the parachute opens. Sizes are in metres (natural
+// perspective at every camera distance). Envelope size is illustrative: the fill
 // volume of the club's balloon is not known yet.
 import * as THREE from "three";
 import { clamp, lerp, mulberry32, rad, smoothstep } from "./util.js";
 
 const LINE_LEN = 9;                       // metres from the envelope down to the payload
 const D0 = 1.4;                           // envelope diameter at launch (m), illustrative
-const PIXELS = 34;                        // how big the envelope looks on screen when far away
-const CAM_OFFSET = new THREE.Vector3(0.9, 0.2, -0.3);   // balloon cam: the payload hangs this far from the lens (m)
 
 const stdPressureRatio = (z) => Math.pow(Math.max(1 - 2.25577e-5 * z, 0.05), 5.25588);
 
@@ -124,16 +122,11 @@ export function createBalloon(S) {
         if (st.envTexture) st.envTexture.dispose();
         st.envTexture = skyEnvironment(O.renderer, k, el); O.scene.environment = st.envTexture; st.envK = k; st.envEl = el;
       }
-      // how big to draw it
-      const camMode = S.cam === "balloon", dist = O.camEnu.distanceTo(S.enu);
-      const d = D0 * Math.pow(1 / stdPressureRatio(alt), 1 / 3), tanHalf = Math.tan(rad(O.camera.fov) / 2);
-      const pxPerM = O.renderer.domElement.height / O.renderer.getPixelRatio() / (2 * tanHalf);
-      const vs = camMode ? 1 : Math.max(1, (PIXELS / pxPerM) * dist / D0);
-      train.scale.setScalar(vs);
-      const far = smoothstep(1, 40, vs);                                   // 0 up close (real proportions), 1 far away
-      const L = LINE_LEN * (1 - far) + Math.max(LINE_LEN, 3.2 * d) * far;   // far away the string is a few envelope diameters, like a drawing of a balloon
-      train.userData.L = L;
-      train.position.copy(camMode ? CAM_OFFSET : new THREE.Vector3(0, 0, -(L + 0.5 * d) * vs * far));
+      // The simulated position is the payload. Camera distance never changes the model's scale or anchor.
+      const camMode = S.cam === "balloon";
+      const d = D0 * Math.pow(1 / stdPressureRatio(alt), 1 / 3), L = LINE_LEN;
+      train.scale.setScalar(1);
+      train.position.set(0, 0, 0);
       payload.visible = !camMode;                                          // you are looking out of the payload
       // swing under the balloon
       const sw = S.playing || true ? Math.sin(now * 0.9) * 0.025 : 0;

@@ -44,9 +44,9 @@ export class Flight {
     this.dots = prim(new C.PointPrimitiveCollection());
     this.ends = prim(new C.PointPrimitiveCollection());
     this.ens.forEach((_, k) => {
-      this.dots.add({ id: { kind: "dot", i: k }, position: this.ens[k][0], pixelSize: 7, color: C.Color.WHITE.withAlpha(0.85),
-        outlineColor: C.Color.fromCssColorString("#74c0ff").withAlpha(0.55), outlineWidth: 3, disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        scaleByDistance: new C.NearFarScalar(2e3, 1.5, 4e5, 0.7) });
+      this.dots.add({ id: { kind: "dot", i: k }, position: this.ens[k][0], pixelSize: 5, color: C.Color.fromCssColorString("#74a5c9").withAlpha(0.48),
+        outlineColor: C.Color.fromCssColorString("#74c0ff").withAlpha(0.55), outlineWidth: 0, disableDepthTestDistance: 0,
+        scaleByDistance: new C.NearFarScalar(2e3, 1, 4e5, 0.35) });
       const e = d.endpoints[k];
       this.ends.add({ id: { kind: "end", i: k }, position: cart(e[0], e[1], 8), pixelSize: 8, color: ORANGE.withAlpha(0.92),
         outlineColor: C.Color.BLACK.withAlpha(0.45), outlineWidth: 1.5, heightReference: C.HeightReference.CLAMP_TO_GROUND,
@@ -97,6 +97,12 @@ export class Flight {
 
   /** Move the dots and the trail to flight time t. `follow` is which balloon gets the trail. */
   update(t, follow) {
+    if (this._lastT === t && this._lastFollow === follow) return;
+    this._lastT = t; this._lastFollow = follow;
+    // A followed flight keeps its complete projected route even after the detail card closes.
+    const route = follow >= 0 ? follow : this.selected;
+    this.selPositions = route != null ? this.ens[route] : [];
+    this.selEnt.show = !this.vis?.hidden && route != null;
     const [i, f] = bracket(this.times, t), tmp = this._tmp || (this._tmp = new C.Cartesian3());
     for (let k = 0; k < this.ens.length; k++) this.dots.get(k).position = C.Cartesian3.lerp(this.ens[k][i], this.ens[k][i + 1], f, tmp);
     const arr = follow >= 0 && this.ens[follow] ? this.ens[follow] : this.nom;
@@ -104,8 +110,8 @@ export class Flight {
   }
 
   select(k) {
-    this.selected = k;
-    if (k == null) { this.selEnt.show = false; this.selRing.show = false; return; }
+    this.selected = k; this._lastT = undefined;
+    if (k == null) { this.selEnt.show = !this.vis?.hidden && this._lastFollow >= 0; this.selRing.show = false; return; }
     const hidden = this.vis?.hidden;
     this.selPositions = this.ens[k].slice();
     const e = this.data.endpoints[k];
@@ -120,7 +126,7 @@ export class Flight {
     this.pathPrim.show = on; this.underlay.show = on; this.dots.show = on && v.dots; this.ends.show = on && v.dots;
     this.rings.forEach((r) => { r.show = on && v.rings; });
     this.launchEnt.show = on; this.trail.show = on;
-    this.selEnt.show = on && this.selected != null; this.selRing.show = on && this.selected != null;
+    this.selEnt.show = on && (this.selected != null || this._lastFollow >= 0); this.selRing.show = on && this.selected != null;
   }
 
   destroy() {

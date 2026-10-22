@@ -21,7 +21,7 @@ export function createWind(S) {
   geo.setAttribute("aTail", aTail); geo.setAttribute("aHead", aHead); geo.setAttribute("aColor", aCol); geo.setAttribute("aSize", aSize);
   geo.instanceCount = COUNT;
   const mat = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending,
+    transparent: true, depthWrite: false, depthTest: false, blending: THREE.NormalBlending,
     uniforms: { uRes: { value: new THREE.Vector2(1, 1) } },
     vertexShader: `
       attribute vec3 aTail; attribute vec3 aHead; attribute vec4 aColor; attribute float aSize;
@@ -60,7 +60,7 @@ export function createWind(S) {
   for (const a of [paPos, paCol, paSize]) a.setUsage(THREE.DynamicDrawUsage);
   pgeo.setAttribute("iPos", paPos); pgeo.setAttribute("iColor", paCol); pgeo.setAttribute("iSize", paSize); pgeo.instanceCount = PUFFS;
   const pmat = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending,
+    transparent: true, depthWrite: false, depthTest: false, blending: THREE.NormalBlending,
     vertexShader: `attribute vec3 iPos; attribute vec4 iColor; attribute float iSize; varying vec2 vUv; varying vec4 vC;
       void main(){ vec4 mv = modelViewMatrix * vec4(iPos, 1.0); mv.xy += position.xy * iSize; vUv = position.xy; vC = iColor; gl_Position = projectionMatrix * mv; }`,
     fragmentShader: `varying vec2 vUv; varying vec4 vC; void main(){ float r2 = dot(vUv, vUv); gl_FragColor = vec4(vC.rgb, vC.a * exp(-r2 * 3.2) * (1.0 - smoothstep(0.7, 1.0, r2))); }`,
@@ -113,11 +113,11 @@ export function createWind(S) {
           const ang = Math.random() * 6.2832;
           let r, dz;
           if (balloonCam) {                                   // ride-along: most of the air you can feel is within a few hundred metres
-            const rr = 1800 * Math.pow(Math.random(), 1.9), el = Math.asin(2 * Math.random() - 1);
+            const rr = 1800 * Math.cbrt(Math.random()), el = Math.asin(2 * Math.random() - 1);
             r = rr * Math.cos(el); dz = rr * Math.sin(el);
           } else { r = H * Math.sqrt(Math.random()); dz = V * (2 * Math.random() - 1); }
           E = focus.x + Math.cos(ang) * r; N = focus.y + Math.sin(ang) * r;
-          const alt = clamp(S.cur.alt + dz, ground + 60, 13900);
+          const alt = S.cur.alt + dz;
           U = alt - (E * E + N * N) / (2 * EARTH_R);
           age[i] = 0; life[i] = 7 + Math.random() * 9; tint[i] = 0.45 + 0.55 * Math.random();
         }
@@ -142,14 +142,15 @@ export function createWind(S) {
         else { tail[i3] = E - u * minLen / Math.max(sp, 0.1); tail[i3 + 1] = N - v * minLen / Math.max(sp, 0.1); tail[i3 + 2] = U; }
         // colour = temperature, brightness = speed, faded in and out over the particle's life and with distance
         tempColor(smp[2], rgb);
-        const fade = Math.min(age[i] / 0.9, (life[i] - age[i]) / 1.3, 1) * (balloonCam ? Math.pow(Math.max(1 - dist / 1500, 0), 2.4) : Math.exp(-dist / (H * 3.2 + 400)));
+        const altitudeFade = smoothstep(ground + 30, ground + 180, alt) * (1 - smoothstep(13700, 14200, alt));
+        const fade = altitudeFade * Math.min(age[i] / 0.9, (life[i] - age[i]) / 1.3, 1) * (balloonCam ? Math.pow(Math.max(1 - dist / 1500, 0), 2.4) : Math.exp(-dist / (H * 3.2 + 400)));
         const speedGlow = 0.5 + 0.55 * smoothstep(2, 35, sp);
         col[i4] = rgb[0] * speedGlow; col[i4 + 1] = rgb[1] * speedGlow; col[i4 + 2] = rgb[2] * speedGlow;
-        col[i4 + 3] = clamp(fade, 0, 1) * tint[i] * (balloonCam ? 0.95 : 0.55);
+        col[i4 + 3] = clamp(fade, 0, 1) * tint[i] * (balloonCam ? 0.48 : 0.35);
         size[i] = pxr * clamp(1.0 + (balloonCam ? 2200 : 900) / (dist + 200), 1.1, balloonCam ? 3.4 : 2.6);
       }
       // wisps
-      const pActive = Math.max(150, Math.round(PUFFS * Math.min(1, 0.4 + 0.6 * S.quality)));
+      const pActive = Math.min(PUFFS, Math.max(80, Math.round(PUFFS * Math.min(1, 0.4 + 0.6 * S.quality))));
       pgeo.instanceCount = pActive;
       for (let i = 0; i < pActive; i++) {
         const i3 = i * 3, i4 = i * 4;
@@ -158,10 +159,10 @@ export function createWind(S) {
         if (!respawn) { const lim = balloonCam ? 2500 : H * 1.3; if (Math.abs(E - focus.x) > lim || Math.abs(N - focus.y) > lim || Math.abs(U + (E * E + N * N) / (2 * EARTH_R) - S.cur.alt) > (balloonCam ? 2500 : V * 1.5)) respawn = true; }
         if (respawn) {
           const ang = Math.random() * 6.2832; let r, dz;
-          if (balloonCam) { const rr = 2400 * Math.pow(Math.random(), 1.5), el = Math.asin(2 * Math.random() - 1); r = rr * Math.cos(el); dz = rr * Math.sin(el); }
+          if (balloonCam) { const rr = 2400 * Math.cbrt(Math.random()), el = Math.asin(2 * Math.random() - 1); r = rr * Math.cos(el); dz = rr * Math.sin(el); }
           else { r = H * Math.sqrt(Math.random()); dz = V * (2 * Math.random() - 1); }
           E = focus.x + Math.cos(ang) * r; N = focus.y + Math.sin(ang) * r;
-          U = clamp(S.cur.alt + dz, ground + 80, 13900) - (E * E + N * N) / (2 * EARTH_R);
+          U = (S.cur.alt + dz) - (E * E + N * N) / (2 * EARTH_R);
           qAge[i] = 0; qLife[i] = 14 + Math.random() * 14;
         }
         const alt = U + (E * E + N * N) / (2 * EARTH_R);
@@ -171,7 +172,7 @@ export function createWind(S) {
         pPos[i3] = E; pPos[i3 + 1] = N; pPos[i3 + 2] = U;
         tempColor(smp[2], rgb);
         const dist = Math.hypot(E - camEnu.x, N - camEnu.y, U - camEnu.z);
-        const fade = Math.min(qAge[i] / 2.5, (qLife[i] - qAge[i]) / 3.0, 1);
+        const fade = smoothstep(ground + 40, ground + 220, alt) * (1 - smoothstep(13700, 14200, alt)) * Math.min(qAge[i] / 2.5, (qLife[i] - qAge[i]) / 3.0, 1);
         pSize[i] = (balloonCam ? 45 + 90 * qSz[i] : clamp(camD * 0.02, 80, 2800) * qSz[i]);
         const near = smoothstep(pSize[i] * 0.6, pSize[i] * 3.0, dist);                       // a puff you are inside of fades so it never blanks the view
         pCol[i4] = rgb[0]; pCol[i4 + 1] = rgb[1]; pCol[i4 + 2] = rgb[2];

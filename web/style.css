@@ -74,3 +74,28 @@ footer p.muted { color: var(--muted); }
   #globe { inset: 0 0 46vh 0; }
   #panel { inset: auto 0 0 0; width: auto; height: 46vh; border-right: 0; border-top: 1px solid var(--line); }
 }
+
+/* launch-time card */
+#launchBig { font-size: 21px; font-weight: 650; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.dateChips { gap: 6px; margin: 10px 0 8px; }
+.dateChips button { padding: 5px 9px; font-size: 12px; line-height: 1.15; text-align: center; }
+.dateChips button b { display: block; font-size: 14px; }
+.stepRow button { padding: 5px 10px; font-size: 12px; }
+#strip { width: 100%; height: auto; display: block; cursor: ew-resize; border-radius: 4px; touch-action: none; }
+#strip .night { fill: #0d0d0c; }
+#strip .twilight { fill: #2b2a28; }
+#strip .day { fill: #3d3b34; }
+#strip .grid { stroke: #00000066; stroke-width: 1; }
+#strip .lbl { fill: var(--ink-2); font-size: 8px; }
+#strip .mark { stroke: var(--ink); stroke-width: 1.5; }
+#strip .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.seg { gap: 0; margin: 0; }
+.seg button { flex: 1; border-radius: 0; }
+.seg button:first-child { border-radius: 6px 0 0 6px; }
+.seg button:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+#timePill { position: fixed; top: 12px; left: calc(360px + (100vw - 360px) / 2); transform: translateX(-50%); z-index: 5;
+  background: rgba(20,20,19,.62); color: #f0efec; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; padding: 6px 16px;
+  font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; backdrop-filter: blur(6px); pointer-events: none; white-space: nowrap; }
+.legend { display: flex; align-items: center; gap: 8px; margin: 6px 0 0 26px; font-size: 11px; color: var(--muted); }
+.legend i { flex: 1; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #256abf, #3987e5, #6da7ec, #9ec5f4, #cde2fb); }
+@media (max-width: 760px) { #timePill { left: 50%; } }

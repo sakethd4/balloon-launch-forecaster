@@ -14,9 +14,24 @@
 <aside id="panel">
   <header>
     <h1>Launch Planner <span>3D</span></h1>
-    <select id="caseSelect" aria-label="Flight case"></select>
+    <div class="row seg" role="group" aria-label="What to show">
+      <button id="modeForecast" class="active">Forecast launch</button><button id="modeReal">Real flight</button>
+    </div>
     <p id="caseSubtitle"></p>
   </header>
+
+  <section id="timeCard">
+    <h2>Launch time <small id="tzNote"></small></h2>
+    <div id="launchBig">-</div>
+    <div id="launchSmall" class="sub"></div>
+    <div class="row dateChips" id="dateChips" role="group" aria-label="Launch date"></div>
+    <div class="row stepRow">
+      <button id="prevHour" title="Previous hour (Left arrow)">&#9664; 1 h</button>
+      <button id="nextHour" title="Next hour (Right arrow)">1 h &#9654;</button>
+      <span class="muted" id="hourCount"></span>
+    </div>
+    <svg id="strip" viewBox="0 0 320 62" role="slider" aria-label="Launch time: click or drag to choose" tabindex="0"></svg>
+  </section>
 
   <section id="playback">
     <div class="row">
@@ -54,8 +69,11 @@
     <h2>Layers</h2>
     <label><input type="checkbox" id="lyEnsemble" checked> Sampled flights (swarm and paths)</label>
     <label><input type="checkbox" id="lyEnd" checked> End points and rings</label>
-    <label><input type="checkbox" id="lyWinds" checked> Winds aloft at launch</label>
+    <label><input type="checkbox" id="lyWinds"> Wind arrows at launch (by height)</label>
     <label><input type="checkbox" id="lyDrop" checked> Drop line to the ground</label>
+    <label><input type="checkbox" id="lyClouds" checked> Clouds (GFS cloud cover)</label>
+    <label><input type="checkbox" id="lyWindFx" checked> Wind: gusts up close, map from afar</label>
+    <div id="windLegend" class="legend" title="Wind speed at the balloon's height, 0 to 40 m/s"><span>0</span><i></i><span>40 m/s</span></div>
   </section>
 
   <section id="live">
@@ -88,6 +106,7 @@
   </footer>
 </aside>
 
+<div id="timePill" aria-live="off"></div>
 <div id="toast" role="status" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/Cesium.js"></script>
 <script src="app.js"></script>

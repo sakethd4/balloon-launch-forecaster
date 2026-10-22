@@ -15,3 +15,6 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 
+
+# Generated viewer cases (11 MB, reproducible with scripts/export_web_case.py); see web/README.md
+web/data/*.json

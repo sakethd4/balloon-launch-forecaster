@@ -64,33 +64,68 @@ def winds_profile(field, lat, lon, lead_h, ground_m):
     return dict(alt_m=alts.tolist(), u=np.round(uv[:, 0], 2).tolist(), v=np.round(uv[:, 1], 2).tolist())
 
 
+def wind_grid(field, lat, lon, lead_h, ground_m, half_deg=1.5, step=0.5):
+    """Forecast winds on a lat/lon grid around the launch at every kilometre of height (for the viewer's
+    gust streaks and wind map). One time only (the middle of the flight): winds change slowly over an hour."""
+    lats = np.round(lat + np.arange(-half_deg, half_deg + 1e-9, step), 4)
+    lons = np.round(lon + np.arange(-half_deg, half_deg + 1e-9, step), 4)
+    alts = np.arange(0.0, 14001.0, 1000.0)
+    uv = np.array([[[field.wind_at(la, lo, a, lead_h, ground_m) for lo in lons] for la in lats] for a in alts])  # (alt, lat, lon, 2)
+    return dict(lat=lats.tolist(), lon=lons.tolist(), alt_m=alts.tolist(),
+                u=np.round(uv[..., 0], 1).tolist(), v=np.round(uv[..., 1], 1).tolist())
+
+
+def cloud_grid(g, lat, lon, lead_h, half_deg=3.0):
+    """GFS total cloud cover (percent) around the launch at the launch time (linear in lead time between the
+    6-hourly steps). Cover is a whole-column number: the viewer picks cloud heights for show."""
+    t = g.tcc.sortby("latitude").sortby("longitude")
+    t = t.sel(latitude=slice(lat - half_deg, lat + half_deg), longitude=slice(lon - half_deg, lon + half_deg)).interp(lead_h=lead_h)
+    return dict(lat=np.round(t.latitude.values, 3).tolist(), lon=np.round(t.longitude.values, 3).tolist(),
+                tcc=np.round(np.nan_to_num(t.values), 0).astype(int).tolist())
+
+
+def parse_leads(text):
+    """'3:96:1' -> 3,4,...,96 ; '25' -> 25 ; '12,24' -> 12,24"""
+    if ":" in text:
+        a, b, c = (float(x) for x in text.split(":"))
+        return [float(x) for x in np.arange(a, b + 1e-9, c)]
+    return [float(x) for x in text.split(",")]
+
+
 def export_forecast(args):
     g, s, field = load_run(args.day)
-    spread, wind = situation_features(s, g, args.lat, args.lon, args.launch_lead)
-    valid = pd.Timestamp(args.day, tz="UTC") + pd.Timedelta(hours=12 + args.launch_lead)
-    situation = dict(lead_h=args.launch_lead, month=valid.month, gfs_wind_ms=float(wind[0]), spread_ms=float(spread[0]))
     model = joblib.load(PROCESSED_DIR / "wind_error_full.joblib")
-    ens = fly_ensemble(field, model, situation, args.lat, args.lon, args.launch_lead, n=args.n, keep_paths=args.n,
-                       rng=np.random.default_rng(0))
-    nom = ens.nominal
-    assert len({len(f.t_s) for f in ens.paths}) == 1 and len(ens.paths[0].t_s) == len(nom.t_s)
-    r50, r90 = ens.radius_km(0.5), ens.radius_km(0.9)
-    idx = thin(nom.t_s)
-    return dict(
-        id=args.id or f"forecast_{args.day}_lead{args.launch_lead:.0f}", kind="forecast",
-        title="Forecast flight from Austin",
-        subtitle=f"GFS run {args.day} 12Z, launch {valid:%Y-%m-%d %H:%MZ} ({args.launch_lead:.0f} h in)",
-        meta=dict(launch=dict(lat=args.lat, lon=args.lon, alt_m=150.0), launch_time_utc=f"{valid:%Y-%m-%dT%H:%M:%SZ}",
-                  init_utc=f"{args.day}T12:00:00Z", lead_h=args.launch_lead, spread_ms=round(float(spread[0]), 2),
-                  gfs_wind_ms=round(float(wind[0]), 1), r50_km=round(r50, 2), r90_km=round(r90, 2), n=args.n,
-                  endpoint_label="landing", burst_time_s=float(nom.t_s[nom.burst_index]),
-                  notes=["Our balloon: 5.8 m/s climb to 13.7 km, 15 m/s parachute descent.",
-                         "Orange dots and faint paths: sampled wind-error flights from the learned model."]),
-        t_s=nom.t_s[idx].round(1).tolist(), alt_m=np.round(nom.alt_m[idx]).tolist(),
-        nominal=dict(lat=round_ll(nom.lat_deg[idx]), lon=round_ll(nom.lon_deg[idx])),
-        ensemble=dict(lat=[round_ll(f.lat_deg[idx]) for f in ens.paths], lon=[round_ll(f.lon_deg[idx]) for f in ens.paths]),
-        endpoints=np.round(ens.landings, 5).tolist(),
-        winds=winds_profile(field, args.lat, args.lon, args.launch_lead, 150.0))
+    cases = []
+    for lead in args.launch_leads:
+        spread, wind = situation_features(s, g, args.lat, args.lon, lead)
+        valid = pd.Timestamp(args.day, tz="UTC") + pd.Timedelta(hours=12 + lead)
+        situation = dict(lead_h=lead, month=valid.month, gfs_wind_ms=float(wind[0]), spread_ms=float(spread[0]))
+        ens = fly_ensemble(field, model, situation, args.lat, args.lon, lead, n=args.n, keep_paths=args.n,
+                           rng=np.random.default_rng(0))
+        nom = ens.nominal
+        assert len({len(f.t_s) for f in ens.paths}) == 1 and len(ens.paths[0].t_s) == len(nom.t_s)
+        r50, r90 = ens.radius_km(0.5), ens.radius_km(0.9)
+        idx = thin(nom.t_s)
+        mid_lead = lead + nom.t_s[-1] / 7200.0
+        cases.append(dict(
+            id=f"forecast_{args.day}_lead{lead:03.0f}", kind="forecast", title="Forecast flight from Austin",
+            subtitle=f"GFS run {args.day} 12Z",
+            meta=dict(launch=dict(lat=args.lat, lon=args.lon, alt_m=150.0), launch_time_utc=f"{valid:%Y-%m-%dT%H:%M:%SZ}",
+                      init_utc=f"{args.day}T12:00:00Z", lead_h=lead, spread_ms=round(float(spread[0]), 2),
+                      gfs_wind_ms=round(float(wind[0]), 1), r50_km=round(r50, 2), r90_km=round(r90, 2), n=args.n,
+                      endpoint_label="landing", burst_time_s=float(nom.t_s[nom.burst_index]),
+                      notes=["Our balloon: 5.8 m/s climb to 13.7 km, 15 m/s parachute descent.",
+                             "Ghost balloons and faint paths: sampled wind-error flights from the learned model.",
+                             "Clouds: GFS total cloud cover at launch time; the heights are drawn for show."]),
+            t_s=nom.t_s[idx].round(1).tolist(), alt_m=np.round(nom.alt_m[idx]).tolist(),
+            nominal=dict(lat=round_ll(nom.lat_deg[idx]), lon=round_ll(nom.lon_deg[idx])),
+            ensemble=dict(lat=[round_ll(f.lat_deg[idx]) for f in ens.paths], lon=[round_ll(f.lon_deg[idx]) for f in ens.paths]),
+            endpoints=np.round(ens.landings, 5).tolist(),
+            winds=winds_profile(field, args.lat, args.lon, lead, 150.0),
+            windgrid=wind_grid(field, args.lat, args.lon, mid_lead, 150.0),
+            clouds=cloud_grid(g, args.lat, args.lon, lead)))
+        print(f"  lead {lead:.0f} h -> {valid:%Y-%m-%d %H:%MZ}: r50 {r50:.1f} km, r90 {r90:.1f} km", flush=True)
+    return cases
 
 
 def export_replay(args):
@@ -136,6 +171,8 @@ def export_replay(args):
         ensemble=dict(lat=[round_ll(p[idx, 0]) for p in paths], lon=[round_ll(p[idx, 1]) for p in paths]),
         endpoints=np.round(paths[:, -1], 5).tolist(),
         winds=winds_profile(field, lat0, lon0, start_lead, ground),
+        windgrid=wind_grid(field, lat0, lon0, start_lead + elapsed[-1] / 7200.0, ground),
+        clouds=cloud_grid(g, lat0, lon0, start_lead),
         observed=dict(source=f"SondeHub {row.serial}", t_s=np.round(elapsed[idx], 1).tolist(),
                       lat=round_ll(sub.lat.to_numpy()[idx]), lon=round_ll(sub.lon.to_numpy()[idx]),
                       alt_m=np.round(sub.alt_m.to_numpy()[idx]).tolist()))
@@ -146,7 +183,8 @@ if __name__ == "__main__":
     sub = p.add_subparsers(dest="mode", required=True)
     f = sub.add_parser("forecast")
     f.add_argument("--day", type=date.fromisoformat, default=date(2026, 10, 18))
-    f.add_argument("--launch-lead", type=float, default=25.0)
+    f.add_argument("--launch-leads", type=parse_leads, default=parse_leads("3:96:1"),
+                   help="launch times as hours after the 12Z run: 'a:b:step', a list, or one number")
     f.add_argument("--lat", type=float, default=30.27)
     f.add_argument("--lon", type=float, default=-97.74)
     r = sub.add_parser("replay")
@@ -155,16 +193,18 @@ if __name__ == "__main__":
         q.add_argument("--n", type=int, default=100)
         q.add_argument("--id")
     args = p.parse_args()
-    case = export_forecast(args) if args.mode == "forecast" else export_replay(args)
+    cases = export_forecast(args) if args.mode == "forecast" else [export_replay(args)]
     WEB_DATA.mkdir(parents=True, exist_ok=True)
-    out = WEB_DATA / f"{case['id']}.json"
-    out.write_text(json.dumps(case, separators=(",", ":")))
-    # the viewer's case list
-    cases = []
+    for case in cases:
+        out = WEB_DATA / f"{case['id']}.json"
+        out.write_text(json.dumps(case, separators=(",", ":")))
+    print(f"wrote {len(cases)} case file(s) to {WEB_DATA} (last: {out.stat().st_size / 1e3:.0f} KB)")
+    # the viewer's case list (one entry per file)
+    index = []
     for fpath in sorted(WEB_DATA.glob("*.json")):
         if fpath.name != "index.json":
             d = json.loads(fpath.read_text())
-            cases.append(dict(id=d["id"], file=fpath.name, title=d["title"], subtitle=d["subtitle"], kind=d["kind"]))
-    (WEB_DATA / "index.json").write_text(json.dumps(cases, indent=1))
-    print(f"wrote {out} ({out.stat().st_size / 1e3:.0f} KB); nominal end-point zones: 50% {case['meta']['r50_km']} km, "
-          f"90% {case['meta']['r90_km']} km")
+            index.append(dict(id=d["id"], file=fpath.name, title=d["title"], subtitle=d["subtitle"], kind=d["kind"],
+                              launch_utc=d["meta"]["launch_time_utc"], init_utc=d["meta"]["init_utc"], lead_h=d["meta"]["lead_h"],
+                              lat=d["meta"]["launch"]["lat"], lon=d["meta"]["launch"]["lon"]))
+    (WEB_DATA / "index.json").write_text(json.dumps(index, indent=1))

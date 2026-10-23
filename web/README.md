@@ -89,8 +89,8 @@ Invoke-WebRequest -Uri 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/
 Invoke-WebRequest -Uri 'https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/Cesium.js' -OutFile 'dist/viewer-check/cesium.cjs'
 ```
 
-**22 viewer checks pass**, including the actual Cesium camera math, real GLB export/node synchronization, route depth
-widths/pass ordering, terrain seams/retries, legend consistency and pointer-captured timeline scrubbing. JavaScript syntax checks pass. The Three.js renderer
+**23 viewer checks pass**, including the actual Cesium camera math, real GLB export/node synchronization, route depth
+widths/pass ordering, terrain seams/retries, legend consistency, pointer-captured timeline scrubbing and imagery orientation. JavaScript syntax checks pass. The Three.js renderer
 and Cesium model drawing are stubbed, so these checks do not validate GPU shader compilation or final appearance.
 The browser tool reports no available in-app browser; manual GPU inspection remains necessary. The preceding backend
 suite passed 45 tests; this change does not modify the backend or forecasts.
@@ -101,3 +101,18 @@ burst/parachute animation, and all weather layer toggles. Imagery/elevation attr
 
 The landing card shows 50%/90% distances from the forecast landing, drift from launch and a compact duration/sample
 count. Wind colours show forecast air temperature (wind is moving air), as identified in the centred legend.
+
+
+## Map tile orientation fix
+
+Relief shading now converts Cesium's pre-flipped ImageBitmap tiles back to north-up before producing a canvas.
+DOM image tiles already arrive north-up and are left in that orientation. Previously the bitmap-to-canvas conversion
+caused individual shaded tiles to be vertically reversed on the globe, disconnecting roads, waterways and coastlines;
+low-level unshaded tiles could also disagree with their shaded children. Original satellite detail, relief shading,
+terrain, provider URLs and Cesium's throttling/parent fallback are preserved. Reload with Ctrl+F5 to discard old tiles.
+
+This follows the pinned [Cesium 1.120 imagery loader](https://github.com/CesiumGS/cesium/blob/1.120/packages/engine/Source/Scene/ImageryProvider.js)
+(`flipY: true` for bitmaps) and [texture upload handling](https://github.com/CesiumGS/cesium/blob/1.120/packages/engine/Source/Renderer/Texture.js)
+(canvas and ImageBitmap have different flip behaviour). A synthetic asymmetric-pixel regression checks bitmap/DOM
+orientation, adjacent north/south edges and relief alignment. It does not replace a browser/GPU check of the screenshot
+locations. Normal progressive sharpening and source imagery date/colour seams may still occur.

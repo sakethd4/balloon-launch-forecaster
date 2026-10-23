@@ -199,3 +199,11 @@ Ribbon size, opacity, motion and zoom fade remain unchanged.
 
 
 Wind density adjusted to multiplier 0.6 at user request (default 1,920 ribbons), superseding 0.4.
+
+
+Map tile repair: identified a bitmap/canvas orientation mismatch in reliefImagery. Pinned Cesium 1.120 decodes imagery
+ImageBitmaps flipped for GPU upload; returning their pixels as an ordinary canvas caused shaded tiles to reverse
+vertically. shadeImagery now corrects bitmap orientation before north-up relief shading; DOM images retain their
+orientation. Preserves satellite detail, terrain and native request throttling. Twenty-three viewer checks pass,
+including asymmetric bitmap/DOM pixel and adjacent-edge regression; screenshot-location GPU confirmation pending.
+Source references and refresh instructions are in web/README.md.

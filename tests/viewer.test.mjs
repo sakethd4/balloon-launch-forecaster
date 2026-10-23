@@ -180,3 +180,40 @@ test('timeline captures continuous drags, clamps the ends and cleans up cancella
   listeners.keydown({key:'End',preventDefault(){}}); assert.equal(state.t,100);
   listeners.keydown({key:'ArrowLeft',preventDefault(){}}); assert.equal(state.t,90);
 });
+
+
+test('relief conversion preserves north/south pixels for bitmap and DOM imagery across adjacent tiles',async()=>{
+  const {shadeImagery}=await import(earthURL);
+  const oldDocument=globalThis.document, oldBitmap=globalThis.ImageBitmap;
+  class Bitmap { constructor(pixels){this.pixels=pixels;} }
+  globalThis.ImageBitmap=Bitmap;
+  globalThis.document={createElement(){
+    const cv={}; let flip=false, pixels;
+    const ctx={save(){},restore(){flip=false;},translate(){},scale(x,y){flip=y===-1;},
+      drawImage(img){pixels=new Uint8ClampedArray(img.pixels.length);
+        for(let y=0;y<256;y++) pixels.set(img.pixels.subarray((flip?255-y:y)*1024,(flip?256-y:y+1)*1024),y*1024);},
+      getImageData(){return {data:pixels};},putImageData(data){cv.pixels=data.data;}};
+    cv.getContext=()=>ctx; return cv;
+  }};
+  try {
+    const tiles=[];
+    for(let tileY=0;tileY<2;tileY++){
+      const northUp=new Uint8ClampedArray(256*256*4), decoded=new Uint8ClampedArray(northUp.length);
+      for(let y=0;y<256;y++)for(let x=0;x<256;x++){
+        const k=(y*256+x)*4;
+        northUp[k]=x; northUp[k+1]=(tileY*255+y)/2; northUp[k+2]=80; northUp[k+3]=255;
+      }
+      for(let y=0;y<256;y++) decoded.set(northUp.subarray(y*1024,(y+1)*1024),(255-y)*1024);
+      const shade=new Float32Array(256*256).fill(1); shade[0]=0.5;
+      const bitmap=shadeImagery(new Bitmap(decoded),shade), dom=shadeImagery({pixels:northUp},shade);
+      assert.deepEqual(bitmap.pixels,dom.pixels);
+      assert.equal(bitmap.pixels[2],40); // north-up relief is applied after the bitmap is corrected
+      assert.equal(bitmap.pixels[1024+1],northUp[1024+1]);
+      tiles.push(bitmap.pixels);
+    }
+    assert.equal(tiles[0][(255*256+12)*4+1],tiles[1][12*4+1]);
+  } finally {
+    globalThis.document=oldDocument;
+    if(oldBitmap===undefined) delete globalThis.ImageBitmap; else globalThis.ImageBitmap=oldBitmap;
+  }
+});

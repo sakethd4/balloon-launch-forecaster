@@ -90,6 +90,27 @@ async function reliefTile(x, y, level) {
   }
   return out;
 }
+/** Convert Cesium imagery to a north-up canvas before applying north-up DEM shading.
+ * Cesium 1.120 decodes ImageBitmap imagery with flipY=true; DOM images are unflipped.
+ * Canvas textures are flipped on GPU upload, whereas ImageBitmap textures are not.
+ */
+export function shadeImagery(img, shade) {
+  const cv = document.createElement("canvas"); cv.width = cv.height = 256;
+  const ctx = cv.getContext("2d", { willReadFrequently: true });
+  ctx.save();
+  if (typeof ImageBitmap !== "undefined" && img instanceof ImageBitmap) {
+    ctx.translate(0, cv.height); ctx.scale(1, -1);
+  }
+  ctx.drawImage(img, 0, 0, 256, 256);
+  ctx.restore();
+  const id = ctx.getImageData(0, 0, 256, 256), d = id.data;
+  for (let i = 0, k = 0; i < shade.length; i++, k += 4) {
+    const m = shade[i];
+    d[k] = Math.min(255, d[k] * m); d[k + 1] = Math.min(255, d[k + 1] * m); d[k + 2] = Math.min(255, d[k + 2] * m);
+  }
+  ctx.putImageData(id, 0, 0);
+  return cv;
+}
 function reliefImagery() {
   const base = new C.UrlTemplateImageryProvider({ url: ESRI, maximumLevel: 18, credit: "Imagery: Esri, Maxar, Earthstar Geographics. Elevation: Mapzen/AWS Terrain Tiles" });
   const orig = base.requestImage.bind(base);
@@ -101,16 +122,7 @@ function reliefImagery() {
       if (!img) return img;
       const shade = await reliefTile(x, y, level).catch(() => null);
       if (!shade) return img;
-      const cv = document.createElement("canvas"); cv.width = cv.height = 256;
-      const ctx = cv.getContext("2d", { willReadFrequently: true });
-      ctx.drawImage(img, 0, 0, 256, 256);
-      const id = ctx.getImageData(0, 0, 256, 256), d = id.data;
-      for (let i = 0, k = 0; i < shade.length; i++, k += 4) {
-        const m = shade[i];
-        d[k] = Math.min(255, d[k] * m); d[k + 1] = Math.min(255, d[k + 1] * m); d[k + 2] = Math.min(255, d[k + 2] * m);
-      }
-      ctx.putImageData(id, 0, 0);
-      return cv;
+      return shadeImagery(img, shade);
     });
   };
   return base;

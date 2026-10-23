@@ -196,3 +196,6 @@ label is simply Wind. The legend identifies air temperature as wind colour. Land
 
 Wind density reduced a further 50% across all quality presets: default 2,560 -> 1,280 ribbons.
 Ribbon size, opacity, motion and zoom fade remain unchanged.
+
+
+Wind density adjusted to multiplier 0.6 at user request (default 1,920 ribbons), superseding 0.4.

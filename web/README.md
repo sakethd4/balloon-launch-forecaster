@@ -18,9 +18,9 @@ Esri imagery, AWS elevation and the pinned CesiumJS/Three.js modules. No map acc
   the travelled trail. Other possible flights are opaque coral dots with a dark edge. Landing circles summarize
   landing probability: the solid ring contains 50% of simulated landings, the dashed ring 90%.
 - The bottom bar's **Hide UI / Show UI** button hides or restores panels, legend, drawer and HUD while preserving
-  the clock, camera controls and transport. This is the circular panel icon at the right end of the bar.
+  the clock, camera controls and transport. This is the circular panel icon at the left end of the bar.
   Left cards retain glass backgrounds; only the scrolling container and scrollbar track are transparent.
-  The altitude graph has a bounded width and preserves its proportions instead of stretching. Drag it
+  The altitude graph is centred, with a bounded width and preserved proportions. Drag it
   to scrub continuously, including outside its edges; playback holds during dragging and resumes on release.
   Arrow keys on the focused graph seek 10 seconds (Shift: 60); Home/End go to launch/landing. Birds are removed.
 - Click a flight or landing point to inspect it. Follow closes the drawer; Stop following is beside the camera controls.
@@ -98,3 +98,6 @@ suite passed 45 tests; this change does not modify the backend or forecasts.
 Suggested GPU checks: near-ground Chase with hills crossing the balloon silhouette; above/below-cloud route angles
 without terrain halos; payload wind without flutter; repeated Top-view drags preserving north-up/nadir; launch changes,
 burst/parachute animation, and all weather layer toggles. Imagery/elevation attribution remains on the map.
+
+The landing card shows 50%/90% distances from the forecast landing, drift from launch and a compact duration/sample
+count. Wind colours show forecast air temperature (wind is moving air), as identified in the centred legend.

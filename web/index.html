@@ -33,7 +33,7 @@
     <h2>Launch site</h2>
     <div class="place" id="siteName">-</div>
     <div class="sub" id="siteCoords"></div>
-    <button id="pickBtn" class="btn primary"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 1v5M10 14v5M1 10h5M14 10h5" stroke="currentColor" stroke-width="1.6"/></svg><span>Pick on the map</span></button>
+    <button id="pickBtn" class="btn primary"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 1v5M10 14v5M1 10h5M14 10h5" stroke="currentColor" stroke-width="1.6"/></svg><span>Choose starting location</span></button>
     <div class="chips" id="presets"></div>
     <p class="hint" id="pickHint" hidden>Click anywhere in the bright area. The dimmed area has no forecast.</p>
   </section>
@@ -52,11 +52,12 @@
 
   <section class="card" id="cardOutcome">
     <h2>Where it could land</h2>
-    <div class="stats3">
-      <div><b id="r50">-</b><span>km<br>half of flights</span></div>
-      <div><b id="r90">-</b><span>km<br>nine in ten</span></div>
-      <div><b id="drift">-</b><span>km drift<br><i id="driftDir"></i></span></div>
+    <p class="outcome-caption">Distance from forecast landing</p>
+    <div class="landing-stats">
+      <div><span>50% land within</span><strong><b id="r50">-</b> <small>km</small></strong></div>
+      <div><span>90% land within</span><strong><b id="r90">-</b> <small>km</small></strong></div>
     </div>
+    <div class="drift-summary"><span>From launch</span><strong><b id="drift">-</b> km <i id="driftDir"></i></strong></div>
     <p class="muted" id="situation"></p>
     <p class="warn" id="warn" hidden></p>
   </section>
@@ -64,7 +65,7 @@
   <section class="card collapsed" id="cardLayers">
     <h2 class="toggle">Scene <small>layers and look</small></h2>
     <div class="body">
-      <label class="sw"><input type="checkbox" id="lyWind" checked><i></i>Wind (colour = temperature)</label>
+      <label class="sw"><input type="checkbox" id="lyWind" checked><i></i>Wind</label>
       <label class="sw" title="Illustrative clouds inferred from GFS forecast humidity, not satellite imagery. Coverage fades at the local forecast-grid boundary and at wide zoom."><input type="checkbox" id="lyClouds" checked><i></i>Clouds (forecast humidity)</label>
       <label class="sw"><input type="checkbox" id="lyDots" checked><i></i>Other possible flights</label>
       <label class="sw"><input type="checkbox" id="lyRings" checked><i></i>Landing zone rings</label>
@@ -74,10 +75,15 @@
 </aside>
 
 <section id="transport">
+  <div class="transport-controls">
+  <button id="toggleUI" class="icon ui-toggle" title="Hide UI" aria-label="Hide UI" aria-pressed="false" aria-controls="left legend details hud">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="2"/><path d="M8 4v12"/><path class="toggle-slash" d="m3 17 14-14"/></svg>
+  </button>
   <button id="restartBtn" class="icon" title="Back to launch"><svg viewBox="0 0 20 20"><path d="M4 4v12M16 4l-9 6 9 6z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></button>
   <button id="playBtn" class="play" title="Play / pause (Space)"><svg id="playIcon" viewBox="0 0 20 20"><path d="M6 3.5l11 6.5-11 6.5z" fill="currentColor"/></svg></button>
   <div class="speeds" id="speeds" role="group" aria-label="Speed">
     <button data-speed="1">1x</button><button data-speed="10">10x</button><button data-speed="30" class="on">30x</button><button data-speed="100">100x</button><button data-speed="300">300x</button>
+  </div>
   </div>
   <svg id="chart" viewBox="0 0 360 64" role="slider" tabindex="0" aria-label="Flight timeline: drag to scrub" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" preserveAspectRatio="xMidYMid meet" width="360" height="64"></svg>
   <div class="read">
@@ -87,9 +93,7 @@
     <div><span>Sideways</span><b id="rSpeed">0 km/h</b></div>
     <div><span>From launch</span><b id="rDist">0.0 km</b></div>
   </div>
-  <button id="toggleUI" class="icon ui-toggle" title="Hide UI" aria-label="Hide UI" aria-pressed="false" aria-controls="left legend details hud">
-    <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="2"/><path d="M8 4v12"/><path class="toggle-slash" d="m3 17 14-14"/></svg>
-  </button>
+
 </section>
 
 <aside id="details" hidden>
@@ -104,7 +108,7 @@
   <div id="windLegend">
   <div class="bar" id="legendBar"></div>
   <div class="ticks"><span>-60</span><span>-30</span><span>0</span><span>20</span><span>40 &deg;C</span></div>
-  <p>Air temperature (&deg;C)</p>
+  <p>Air temperature (&deg;C) &middot; wind colour</p>
   </div>
   <p class="route-key"><span class="key-line forecast"></span>Forecast <span class="key-line selected"></span>Selected</p>
   <p>Landing probability: 50% solid &middot; 90% dashed</p>

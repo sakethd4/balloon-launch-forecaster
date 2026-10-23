@@ -70,7 +70,7 @@ export function initUI(S, h) {
 }
 export function setSpeedChip(v) { document.querySelectorAll("#speeds button").forEach((b) => b.classList.toggle("on", Number(b.dataset.speed) === v)); }
 export function setCamChip(mode) { document.querySelectorAll("#camModes button").forEach((b) => b.classList.toggle("on", b.dataset.cam === mode)); document.body.classList.toggle("balloon-cam", mode === "balloon"); $("hud").hidden = mode !== "balloon"; }
-export function setPicking(on) { $("pickBtn").classList.toggle("picking", on); $("pickBtn").querySelector("span").textContent = on ? "Click the map..." : "Pick on the map"; $("pickHint").hidden = !on; document.body.classList.toggle("picking", on); }
+export function setPicking(on) { $("pickBtn").classList.toggle("picking", on); $("pickBtn").querySelector("span").textContent = on ? "Click the map..." : "Choose starting location"; $("pickHint").hidden = !on; document.body.classList.toggle("picking", on); }
 export function setFollowing(k) {
   $("stopFollow").hidden = k < 0;
   $("stopFollow").title = k < 0 ? "Stop following" : `Stop following possible flight ${k + 1}`;
@@ -86,9 +86,8 @@ export function renderOutcome(S) {
   const m = S.data.meta, d = S.data;
   $("r50").textContent = m.r50_km.toFixed(1); $("r90").textContent = m.r90_km.toFixed(1);
   const la = d.nominal.lat.at(-1), lo = d.nominal.lon.at(-1), dist = kmBetween(m.launch.lat, m.launch.lon, la, lo);
-  $("drift").textContent = dist.toFixed(0); $("driftDir").textContent = `toward ${compass(bearingDeg(m.launch.lat, m.launch.lon, la, lo))}`;
-  $("situation").textContent = `Forecast ${m.lead_h.toFixed(0)} h ahead. Ensemble wind spread ${m.spread_ms.toFixed(1)} m/s; ${Math.round(m.flight_time_s / 60)} minute flight. ` +
-    `${m.n} possible flights simulated.`;
+  $("drift").textContent = dist.toFixed(0); $("driftDir").textContent = compass(bearingDeg(m.launch.lat, m.launch.lon, la, lo));
+  $("situation").textContent = `${Math.round(m.flight_time_s / 60)} min flight \u00b7 ${m.n} simulations`;
   const w = $("warn");
   if (m.left_domain_nominal || m.left_domain_count > 0) {
     w.hidden = false;

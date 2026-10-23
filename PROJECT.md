@@ -186,3 +186,9 @@ container and scrollbar track are transparent. The altitude graph now keeps its 
 width instead of stretching across spare transport space. Hide/Show UI is an accessible circular panel icon at the
 right end of the transport, matching its other icon controls. Removed the wind-ribbon length caption and centred
 legend text. Existing continuous scrubbing remains intact.
+
+
+Viewer wording/layout refinement: UI visibility icon moved to the transport's left; equal side columns centre the
+bounded timeline, with a centred second row on smaller screens. Launch action says Choose starting location; layer
+label is simply Wind. The legend identifies air temperature as wind colour. Landing summary uses two clearly labelled
+50%/90% distances from forecast landing, a separate launch-drift row and short flight-duration/simulation count.

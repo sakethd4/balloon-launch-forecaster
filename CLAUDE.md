@@ -249,3 +249,8 @@ vertically. shadeImagery now corrects bitmap orientation before north-up relief 
 orientation. Preserves satellite detail, terrain and native request throttling. Twenty-three viewer checks pass,
 including asymmetric bitmap/DOM pixel and adjacent-edge regression; screenshot-location GPU confirmation pending.
 Source references and refresh instructions are in web/README.md.
+
+
+Repository overview: root README.md now provides a brief project introduction, features, setup requirements,
+local-network serving and future plans, with four user-supplied simulator screenshots in docs/screenshots/.
+Detailed viewer documentation remains in web/README.md.

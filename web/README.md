@@ -1,5 +1,7 @@
 # Launch Planner
 
+For a brief overview and simulator screenshots, see the [repository README](../README.md).
+
 From the project root:
 
 ```powershell

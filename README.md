@@ -1,6 +1,6 @@
 # Launch Planner
 
-A probabilistic weather-balloon flight simulator built for a university club in the Austin, Texas area. Choose a launch location and time to explore a forecast route, plausible alternative flights, and landing uncertainty in an interactive 3D map.
+Choose a launch location and time to explore a forecast route, plausible alternative flights, and landing uncertainty in an interactive 3D map.
 
 ## Features
 
@@ -21,7 +21,7 @@ A probabilistic weather-balloon flight simulator built for a university club in 
 
 Archived NOAA GFS forecasts drive a vectorized Python simulator. A gradient-boosted wind-error model uses forecast lead time, season, wind speed, and GEFS spread to generate alternative wind profiles. The resulting flights and landing distribution are displayed with CesiumJS and Three.js.
 
-The model is evaluated on later years than it trains on, including checks against soundings and real balloon tracks. Improvements over a simple lead-time baseline are modest; real-track landing zones currently tend to be conservative. See [PROJECT.md](PROJECT.md) for background and [CLAUDE.md](CLAUDE.md) for recorded results.
+The model is evaluated on later years than it trains on, including checks against soundings and real balloon tracks.
 
 ## Run locally
 

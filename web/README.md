@@ -15,7 +15,12 @@ Esri imagery, AWS elevation and the pinned CesiumJS/Three.js modules. No map acc
 
 - Click the map or a preset to choose a launch site; choose the archived launch hour. The Python server flies 100
   sampled flights on demand (`/api/case`). Blue is the forecast route, amber the selected/followed route, and pale blue
-  the travelled trail. Landing circles summarize the simulated distribution: 50% solid, 90% dashed.
+  the travelled trail. Other possible flights are opaque coral dots with a dark edge. Landing circles summarize
+  landing probability: the solid ring contains 50% of simulated landings, the dashed ring 90%.
+- The bottom bar's **Hide UI / Show UI** button hides or restores panels, legend, drawer and HUD while preserving
+  the clock, camera controls and transport. Left panels have fully transparent backgrounds. Drag the altitude graph
+  to scrub continuously, including outside its edges; playback holds during dragging and resumes on release.
+  Arrow keys on the focused graph seek 10 seconds (Shift: 60); Home/End go to launch/landing. Birds are removed.
 - Click a flight or landing point to inspect it. Follow closes the drawer; Stop following is beside the camera controls.
   Selecting another flight previews its route without switching the followed balloon until Follow is pressed.
 - Orbit has free globe controls. Chase uses drag to orbit the balloon and the wheel to zoom, with bounded pitch/range
@@ -50,7 +55,7 @@ app's exact display settings:
 | --- | --- |
 | [Met Office forecast colour scales](https://weather.metoffice.gov.uk/learn-about/how-forecasts-are-made/forecast-colour-scales): consistent scales, lightness differences and accessible cool/warm hues. | Fixed blue-neutral-orange temperature scale, a fixed freezing reference, numerical Celsius ticks, and the same colour function for wind and legend, including both scale endpoints. |
 | [NOAA probabilistic decision support](https://www.weather.gov/tbw/probabilistic): show the range of possible solutions and uncertainty. | Preserve ensemble flights and 50%/90% landing rings; label their solid/dashed styles and forecast/selected routes explicitly. Decorative atmosphere stays secondary to the analytical display. |
-| [ECMWF forecast charts](https://www.ecmwf.int/): distinguish forecast base time, lead and valid time. | Launch controls retain initialization/lead information; the legend shows the weather snapshot's UTC valid time and identifies GFS forecast data. Procedural clouds and illustrative balloon size are stated. |
+| [ECMWF forecast charts](https://www.ecmwf.int/): distinguish forecast base time, lead and valid time. | Launch controls retain initialization/lead information. Per the UI cleanup request, the extra snapshot timestamp and illustrative-effect notes are kept out of the legend; cloud provenance remains in the layer tooltip and this README. |
 | [Cesium native models](https://cesium.com/learn/cesiumjs/ref-doc/Model.html): local-frame models participate in the 3D scene. | Balloon/terrain occlusion uses the globe renderer, instead of a separate canvas pretending to share terrain depth. Top view has predictable map-only navigation. |
 
 The native model is built once with the pinned Three.js GLTFExporter. If that renderer fails, the app reports it and
@@ -82,8 +87,8 @@ Invoke-WebRequest -Uri 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/
 Invoke-WebRequest -Uri 'https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/Cesium.js' -OutFile 'dist/viewer-check/cesium.cjs'
 ```
 
-**21 viewer checks pass**, including the actual Cesium camera math, real GLB export/node synchronization, route depth
-widths/pass ordering, terrain seams/retries and legend consistency. JavaScript syntax checks pass. The Three.js renderer
+**22 viewer checks pass**, including the actual Cesium camera math, real GLB export/node synchronization, route depth
+widths/pass ordering, terrain seams/retries, legend consistency and pointer-captured timeline scrubbing. JavaScript syntax checks pass. The Three.js renderer
 and Cesium model drawing are stubbed, so these checks do not validate GPU shader compilation or final appearance.
 The browser tool reports no available in-app browser; manual GPU inspection remains necessary. The preceding backend
 suite passed 45 tests; this change does not modify the backend or forecasts.

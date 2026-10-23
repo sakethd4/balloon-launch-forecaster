@@ -1,5 +1,5 @@
 // A Three.js layer drawn on top of the Cesium globe. Its camera is copied from Cesium's every frame, so the balloon,
-// wind, clouds and birds line up with the terrain. All objects live in `world`, a local east-north-up frame centred
+// wind and clouds line up with the terrain. All objects live in `world`, a local east-north-up frame centred
 // on the launch point (so coordinates stay small and float32 precision is plenty); `world` is re-placed each frame
 // relative to the camera, which sits at the origin.
 import * as THREE from "three";

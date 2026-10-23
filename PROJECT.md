@@ -167,3 +167,15 @@ replacing the halo-producing screen-space cutout; covered map routes remain fain
 research informed consistent cool/warm colours with matching legends, explicit route/probability keys, forecast valid-time
 labels and clear separation of measured forecast inputs from illustrative effects. Sources and implementation rationale
 are recorded in web/README.md. Twenty-one viewer checks pass; GPU appearance still requires manual verification.
+
+
+### Viewer interface cleanup (2026-10-22)
+
+Flight details use a geometrically centred SVG close icon. Other possible flights are opaque coral markers with a
+subtle dark outline, retaining their existing sizes and terrain depth. Birds and their layer toggle are removed.
+The legend drops the extra weather valid-time and illustrative-effect notes; rings are labelled landing probability
+(50% solid / 90% dashed), meaning fractions of simulated landings rather than a calibrated guarantee for real flights.
+The transport's Hide UI / Show UI control preserves clock, perspective and transport while hiding the other app
+panels; left card backgrounds are fully transparent. UI visibility is controlled consistently in all camera modes.
+Altitude-chart scrubbing captures pointer drags, clamps endpoints and holds playback until release, with cancellation
+cleanup and keyboard seeking. Twenty-two viewer checks pass; browser/GPU visual inspection remains pending.

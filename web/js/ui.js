@@ -1,6 +1,7 @@
 // The interface: cards, the launch-time picker, the transport bar and the details drawer. Pure DOM; the app state and
 // the actions live in main.js and are passed in as `h` (handlers).
 import { $, bearingDeg, clamp, clockText, compass, daylight, kmBetween, local, localDayKey, localHour, sunElevation, tempGradientCss, utcText } from "./util.js";
+import { bindTimeline } from "./timeline.js";
 import { CITIES } from "./earth.js";
 
 const PRESETS = [["Austin", 30.267, -97.743], ["Round Rock", 30.508, -97.679], ["Georgetown", 30.633, -97.677], ["Bastrop", 30.110, -97.315],
@@ -42,16 +43,23 @@ export function initUI(S, h) {
   $("playBtn").addEventListener("click", () => h.togglePlay());
   $("restartBtn").addEventListener("click", () => h.seek(0));
   $("speeds").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { h.setSpeed(Number(b.dataset.speed)); setSpeedChip(Number(b.dataset.speed)); } });
-  $("chart").addEventListener("click", (e) => { const r = $("chart").getBoundingClientRect(); h.seek(((e.clientX - r.left) / r.width * 360 - 30) / 320); });
+  bindTimeline($("chart"), S, h);
+  $("toggleUI").addEventListener("click", () => {
+    const hidden = document.body.classList.toggle("ui-hidden");
+    $("toggleUI").textContent = hidden ? "Show UI" : "Hide UI";
+    $("toggleUI").setAttribute("aria-pressed", String(hidden));
+    for (const id of ["left", "legend", "details", "hud"]) $(id).inert = hidden;
+  });
   // cameras, drawer, layers
   $("camModes").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b?.dataset.cam) h.setCam(b.dataset.cam); });
   $("stopFollow").addEventListener("click", () => h.follow(-1));
   $("detailsClose").addEventListener("click", () => h.select(null));
   $("dFollow").addEventListener("click", () => { if (S.selected != null) h.follow(S.follow === S.selected ? -1 : S.selected); });
   document.querySelectorAll("#cardLayers h2.toggle").forEach((t) => t.addEventListener("click", () => t.parentElement.classList.toggle("collapsed")));
-  for (const id of ["lyWind", "lyClouds", "lyBirds", "lyDots", "lyRings"]) $(id).addEventListener("change", () => h.layers());
+  for (const id of ["lyWind", "lyClouds", "lyDots", "lyRings"]) $(id).addEventListener("change", () => h.layers());
   $("exag").addEventListener("input", (e) => { $("exagOut").textContent = `${Number(e.target.value).toFixed(1)}x`; h.exaggeration(Number(e.target.value)); });
   window.addEventListener("keydown", (e) => {
+    if (e.defaultPrevented) return;
     if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
     if (e.code === "Space") { e.preventDefault(); h.togglePlay(); }
     else if (e.code === "ArrowLeft" && S.cam !== "balloon") { e.preventDefault(); h.setLead(S.lead - 1); }
@@ -93,7 +101,6 @@ export function launchDate(S, lead) { return new Date(Date.parse(S.run + "T12:00
 export function renderTimeCard(S) {
   const when = launchDate(S, S.lead), l = local(when);
   $("launchBig").textContent = `${l.weekday}, ${l.month} ${l.day} · ${l.hour}:${l.minute} ${l.dayPeriod} ${l.timeZoneName}`;
-  if (S.data) $("weatherStamp").textContent = `GFS forecast \u00b7 valid ${new Date(S.launchMs + S.data.meta.flight_time_s * 500).toISOString().slice(0,16).replace("T"," ")} UTC`;
   $("launchSmall").textContent = `Launch ${utcText(when)} \u00b7 GFS ${S.run} 12Z \u00b7 +${S.lead}h`;
   const days = new Map();
   for (let ld = S.region.lead_min_h; ld <= S.region.lead_max_h; ld++) { const k = localDayKey(launchDate(S, ld)); if (!days.has(k)) days.set(k, []); days.get(k).push(ld); }
@@ -159,6 +166,8 @@ export function updateReadouts(S, st) {
   setText("rVert", `${st.vert >= 0 ? "+" : ""}${st.vert.toFixed(1)} m/s`);
   setText("rSpeed", `${st.side.toFixed(0)} km/h`);
   setText("rDist", `${st.dist.toFixed(1)} km`);
+  $("chart").setAttribute("aria-valuenow", (S.t / S.tEnd * 100).toFixed(1));
+  $("chart").setAttribute("aria-valuetext", `${Math.round(S.t / 60)} of ${Math.round(S.tEnd / 60)} minutes`);
   const cur = $("chartCursor"); if (cur) { const x = 30 + (S.t / S.tEnd) * 320; cur.setAttribute("x1", x); cur.setAttribute("x2", x); }
   const date = new Date(Date.parse(S.data.meta.launch_time_utc) + S.t * 1000), l = local(date);
   const el = st.sunEl, phase = el > 0 ? "day" : el > -6 ? "twilight" : "night";

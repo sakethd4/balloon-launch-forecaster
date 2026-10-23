@@ -66,7 +66,6 @@
     <div class="body">
       <label class="sw"><input type="checkbox" id="lyWind" checked><i></i>Wind (colour = temperature)</label>
       <label class="sw" title="Illustrative clouds inferred from GFS forecast humidity, not satellite imagery. Coverage fades at the local forecast-grid boundary and at wide zoom."><input type="checkbox" id="lyClouds" checked><i></i>Clouds (forecast humidity)</label>
-      <label class="sw"><input type="checkbox" id="lyBirds" checked><i></i>Birds</label>
       <label class="sw"><input type="checkbox" id="lyDots" checked><i></i>Other possible flights</label>
       <label class="sw"><input type="checkbox" id="lyRings" checked><i></i>Landing zone rings</label>
       <label class="slider">Terrain height <input type="range" id="exag" min="1" max="3.5" step="0.1" value="1"><output id="exagOut">1.0x</output></label>
@@ -80,7 +79,8 @@
   <div class="speeds" id="speeds" role="group" aria-label="Speed">
     <button data-speed="1">1x</button><button data-speed="10">10x</button><button data-speed="30" class="on">30x</button><button data-speed="100">100x</button><button data-speed="300">300x</button>
   </div>
-  <svg id="chart" viewBox="0 0 360 64" role="img" aria-label="Altitude over the flight; click to jump"></svg>
+  <svg id="chart" viewBox="0 0 360 64" role="slider" tabindex="0" aria-label="Flight timeline: drag to scrub" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" preserveAspectRatio="none"></svg>
+  <button id="toggleUI" class="ui-toggle" aria-pressed="false" aria-controls="left legend details hud">Hide UI</button>
   <div class="read">
     <div><span>Flight</span><b id="rTime">T+00:00</b></div>
     <div><span>Altitude</span><b id="rAlt">0.0 km</b></div>
@@ -91,7 +91,7 @@
 </section>
 
 <aside id="details" hidden>
-  <button id="detailsClose" class="x" title="Close">&times;</button>
+  <button id="detailsClose" class="x" title="Close" aria-label="Close flight details"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
   <h3 id="dTitle">-</h3>
   <p class="sub" id="dSub"></p>
   <dl id="dList"></dl>
@@ -105,9 +105,7 @@
   <p>Air temperature (&deg;C) &middot; longer ribbons = faster wind</p>
   </div>
   <p class="route-key"><span class="key-line forecast"></span>Forecast <span class="key-line selected"></span>Selected</p>
-  <p>Landing spread: 50% solid &middot; 90% dashed</p>
-  <p class="source-note" id="weatherStamp"></p>
-  <p class="source-note">Clouds are illustrative; covered routes fade. Balloon &times;60.</p>
+  <p>Landing probability: 50% solid &middot; 90% dashed</p>
 </div>
 
 <div id="hud" hidden>

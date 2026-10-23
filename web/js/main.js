@@ -9,7 +9,6 @@ import * as ui from "./ui.js";
 import { createBalloon } from "./balloon.js";
 import { createWind } from "./wind.js";
 import { createClouds } from "./clouds.js";
-import { createBirds } from "./birds.js";
 
 const C = window.Cesium;
 const AUSTIN = { lat: 30.267, lon: -97.743 };
@@ -87,10 +86,10 @@ const handlers = {
   },
   layers() {
     const on = (id) => $(id).checked;
-    S.layers = { wind: on("lyWind"), clouds: on("lyClouds"), birds: on("lyBirds"), dots: on("lyDots"), rings: on("lyRings") };
+    S.layers = { wind: on("lyWind"), clouds: on("lyClouds"), dots: on("lyDots"), rings: on("lyRings") };
     if (S.flight) S.flight.setVisible({ dots: S.layers.dots, rings: S.layers.rings, hidden: S.cam === "balloon" });
-    const [, wind, clouds, birds] = S.modules;
-    wind.setVisible(S.layers.wind); clouds.setVisible(S.layers.clouds); birds.setVisible(S.layers.birds);
+    const [, wind, clouds] = S.modules;
+    wind.setVisible(S.layers.wind); clouds.setVisible(S.layers.clouds);
     $("windLegend").hidden = !S.layers.wind;
   },
   exaggeration(v) { S.earth.scene.verticalExaggeration = v; },
@@ -156,7 +155,7 @@ function frame() {
   const now = performance.now(), dt = Math.min(0.1, (now - S.last) / 1000);
   S.last = now;
   if (!S.data) return;
-  if (S.playing) {
+  if (S.playing && !S.scrubbing) {
     S.t += dt * S.speed;
     if (S.t >= S.tEnd) { S.t = S.tEnd; S.playing = false; ui.setPlaying(false); }
   }
@@ -176,7 +175,7 @@ function frame() {
   S.earth.viewer.clock.currentTime = C.JulianDate.fromDate(date);
   S.cameras.update(S.pos, performance.now() / 1000, S.data.meta.launch.ground_m);
   S.overlay.ecefToEnu(S.pos, S.enu || (S.enu = new THREE.Vector3()));
-  S.timeScale = S.playing ? S.speed : 6;                         // wind and birds keep drifting a little when paused
+  S.timeScale = S.playing ? S.speed : 6;                         // wind keeps drifting a little when paused
   S.dt = dt;
   S.earth.enforceClearance();
   S.overlay.sync();
@@ -223,7 +222,7 @@ function setupPicking() {
   clock.clockRange = C.ClockRange.UNBOUNDED; clock.shouldAnimate = false;
   S.overlay = createOverlay(S.earth);
   S.cameras = new Cameras(S.earth);
-  S.modules = [createBalloon(S), createWind(S), createClouds(S), createBirds(S)];
+  S.modules = [createBalloon(S), createWind(S), createClouds(S)];
   ui.initUI(S, handlers); ui.renderRuns(S); ui.setSpeedChip(S.speed);
   S.earth.scene.preRender.addEventListener(frame);
   setupPicking();

@@ -48,7 +48,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, svg:focus-visib
 
 /* ---- cards ---- */
 #left { position: fixed; top: auto; left: 16px; bottom: 26px; max-height: calc(100dvh - 100px); width: 332px; z-index: 5; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; padding-right: 2px; scrollbar-width: thin; }
-.card { flex-shrink: 0; background: var(--glass); border: 1px solid var(--stroke); border-radius: var(--radius); padding: 14px 16px 16px; backdrop-filter: blur(18px) saturate(1.3); box-shadow: var(--shadow); }
+.card { flex-shrink: 0; background: transparent; border: 0; border-radius: var(--radius); padding: 14px 16px 16px; text-shadow: 0 1px 4px #000; }
 .card h2 { margin: 0 0 10px; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
 .card h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 6px; }
 .card h2.toggle { cursor: pointer; margin: 0; }
@@ -113,7 +113,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, svg:focus-visib
 .speeds { display: flex; background: rgba(255, 255, 255, .06); border-radius: 999px; padding: 2px; flex: none; }
 .speeds button { border: 0; background: transparent; padding: 5px 10px; border-radius: 999px; font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .speeds button.on { background: rgba(255, 255, 255, .16); color: #fff; }
-#chart { flex: 1; min-width: 120px; height: 56px; cursor: pointer; }
+#chart { flex: 1; min-width: 120px; height: 56px; cursor: ew-resize; touch-action: none; user-select: none; }
 #chart .area { fill: rgba(116, 192, 255, .20); } #chart .line { fill: none; stroke: var(--accent); stroke-width: 2; }
 #chart .cursor { stroke: #fff; stroke-width: 1.4; } #chart .tick { fill: var(--muted); font-size: 9px; font-family: var(--font); } #chart .axis { stroke: var(--stroke); }
 .read { display: flex; gap: 18px; flex: none; }
@@ -125,7 +125,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, svg:focus-visib
   border-radius: var(--radius); backdrop-filter: blur(20px) saturate(1.3); box-shadow: var(--shadow); animation: slide .25s ease-out; }
 @keyframes slide { from { transform: translateX(20px); opacity: 0; } to { transform: none; opacity: 1; } }
 #details h3 { margin: 0; font-size: 17px; letter-spacing: -.2px; padding-right: 24px; }
-#details .x { position: absolute; top: 10px; right: 12px; border: 0; background: rgba(255, 255, 255, .08); width: 26px; height: 26px; border-radius: 50%; font-size: 17px; line-height: 24px; }
+#details .x { position: absolute; top: 10px; right: 12px; border: 0; background: rgba(255, 255, 255, .08); width: 26px; height: 26px; border-radius: 50%; padding: 0; display: grid; place-items: center; }
+#details .x svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 #details dl { margin: 12px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; font-size: 13px; }
 #details dt { color: var(--muted); } #details dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 550; }
 
@@ -145,8 +146,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, svg:focus-visib
 
 body.picking #globe canvas { cursor: crosshair !important; }
 body.balloon-cam #globe canvas { cursor: grab !important; }
-body.balloon-cam #left, body.balloon-cam #legend { opacity: .0; pointer-events: none; transition: opacity .35s; }
-@media (max-width: 1100px) { .read div:nth-child(n+4) { display: none; } #left { width: 300px; } #transport { left: 336px; } #legend, #hud { left: 336px; } }
+@media (max-width: 1100px) { #transport { flex-wrap: wrap; gap: 10px; } .read div:nth-child(n+4) { display: none; } #left { width: 300px; } #transport { left: 336px; } #legend, #hud { left: 336px; } }
 @media (max-width: 760px) { #left { display: none; } #transport { left: 12px; flex-wrap: wrap; } #legend, #hud { left: 12px; } .read { display: none; } }
 
 @media (max-width: 760px) {
@@ -163,4 +163,9 @@ body.balloon-cam #left, body.balloon-cam #legend { opacity: .0; pointer-events: 
 .key-line { display: inline-block; width: 22px; height: 2px; flex: none; }
 .key-line.forecast { background: #6da7ec; }
 .key-line.selected { background: #ffd27a; margin-left: 8px; }
-#legend .source-note { color: var(--muted); font-size: 10px; }
+
+/* Focus mode preserves the clock, camera controls and the complete transport bar. */
+#transport .ui-toggle { flex: none; padding: 7px 9px; border: 1px solid var(--stroke-2); border-radius: 9px; background: transparent; white-space: nowrap; font-size: 12px; }
+body.ui-hidden #left, body.ui-hidden #legend, body.ui-hidden #details,
+body.ui-hidden #hud, body.ui-hidden #disclaimer, body.ui-hidden #loading, body.ui-hidden #toast { visibility: hidden; pointer-events: none; }
+body.ui-hidden #transport { left: 16px; }

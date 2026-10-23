@@ -128,8 +128,10 @@ test('imagery preserves the synchronous retry signal and returns loaded images',
   const provider=reliefImagery(); assert.equal(provider.requestImage(0,0,0),undefined);
   provider.throttled=false; assert.equal(await provider.requestImage(0,0,0),provider.image);
 });
+const timelineURL=asModule((await readFile(new URL('../web/js/timeline.js',import.meta.url),'utf8')).replace('"./util.js"',JSON.stringify(util)));
+const {bindTimeline}=await import(timelineURL);
 const uiSource=(await readFile(new URL('../web/js/ui.js',import.meta.url),'utf8'))
-  .replace('"./util.js"',JSON.stringify(util)).replace('"./earth.js"',JSON.stringify(earthURL));
+  .replace('"./util.js"',JSON.stringify(util)).replace('"./earth.js"',JSON.stringify(earthURL)).replace('"./timeline.js"',JSON.stringify(timelineURL));
 const UI=await import(asModule(uiSource));
 test('follow controls toggle follow/stop without treating the stop button as a camera mode',()=>{
   const elements=new Map();
@@ -155,4 +157,26 @@ test('temperature legend uses the rendered fixed colour scale including both end
   assert.ok(Math.abs(freezing[0]-freezing[2])<0.02);
   const rgb=c=>`rgb(${c.map(v=>Math.round(v*255)).join(',')})`;
   assert.ok(css.includes(rgb(cold)+' 0%')); assert.ok(css.includes(rgb(warm)+' 100%'));
+});
+
+
+test('timeline captures continuous drags, clamps the ends and cleans up cancellations',()=>{
+  const listeners={}, state={data:{}, t:50, tEnd:100, playing:true}; let captured=null;
+  const chart={addEventListener:(name,fn)=>listeners[name]=fn, focus(){},
+    getBoundingClientRect:()=>({left:100,width:720}), setPointerCapture:id=>captured=id,
+    hasPointerCapture:id=>captured===id, releasePointerCapture:()=>captured=null};
+  window.addEventListener=()=>{};
+  bindTimeline(chart,state,{seek:f=>state.t=f*state.tEnd});
+  const ev=(x,id=1)=>({clientX:x,pointerId:id,button:0,preventDefault(){}});
+  listeners.pointerdown(ev(480)); assert.equal(state.scrubbing,true); assert.equal(captured,1);
+  assert.equal(state.t,50);
+  listeners.pointermove(ev(1000,2)); assert.equal(state.t,50);
+  listeners.pointermove(ev(1000)); assert.equal(state.t,100);
+  listeners.pointermove(ev(0)); assert.equal(state.t,0);
+  listeners.pointerup(ev(640)); assert.equal(state.t,75); assert.equal(state.scrubbing,false);
+  assert.equal(captured,null); assert.equal(state.playing,true);
+  listeners.pointerdown(ev(480)); listeners.pointercancel(ev(480)); assert.equal(state.scrubbing,false);
+  listeners.pointerdown(ev(480)); listeners.lostpointercapture(ev(480)); assert.equal(state.scrubbing,false);
+  listeners.keydown({key:'End',preventDefault(){}}); assert.equal(state.t,100);
+  listeners.keydown({key:'ArrowLeft',preventDefault(){}}); assert.equal(state.t,90);
 });

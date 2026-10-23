@@ -209,3 +209,15 @@ clouds and illustrative model size. Sources and mappings are in web/README.md. N
 21 Node checks pass (actual Cesium camera math incl. top pan/zoom, real glTF export and mirrored model node transforms,
 cloud route depth widths/pass ordering, terrain retry/seams and palette/legend consistency). JS syntax checks pass.
 GPU rendering/model drawing remain unverified: browser tool reports IAB unavailable. See web/README.md for setup/QA.
+
+
+### Viewer interface cleanup (2026-10-22)
+
+Flight details use a geometrically centred SVG close icon. Other possible flights are opaque coral markers with a
+subtle dark outline, retaining their existing sizes and terrain depth. Birds and their layer toggle are removed.
+The legend drops the extra weather valid-time and illustrative-effect notes; rings are labelled landing probability
+(50% solid / 90% dashed), meaning fractions of simulated landings rather than a calibrated guarantee for real flights.
+The transport's Hide UI / Show UI control preserves clock, perspective and transport while hiding the other app
+panels; left card backgrounds are fully transparent. UI visibility is controlled consistently in all camera modes.
+Altitude-chart scrubbing captures pointer drags, clamps endpoints and holds playback until release, with cancellation
+cleanup and keyboard seeking. Twenty-two viewer checks pass; browser/GPU visual inspection remains pending.

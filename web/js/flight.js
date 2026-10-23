@@ -44,8 +44,8 @@ export class Flight {
     this.dots = prim(new C.PointPrimitiveCollection());
     this.ends = [];
     this.ens.forEach((_, k) => {
-      this.dots.add({ id: { kind: "dot", i: k }, position: this.ens[k][0], pixelSize: 5, color: C.Color.fromCssColorString("#74a5c9").withAlpha(0.48),
-        outlineColor: C.Color.fromCssColorString("#74c0ff").withAlpha(0.55), outlineWidth: 0, disableDepthTestDistance: 0,
+      this.dots.add({ id: { kind: "dot", i: k }, position: this.ens[k][0], pixelSize: 5, color: C.Color.fromCssColorString("#ff796b").withAlpha(1),
+        outlineColor: C.Color.fromCssColorString("#271d24").withAlpha(0.8), outlineWidth: 1, disableDepthTestDistance: 0,
         scaleByDistance: new C.NearFarScalar(2e3, 1, 4e5, 0.35) });
       const e = d.endpoints[k];
       // Entity points support terrain clamping; PointPrimitive ignores heightReference.

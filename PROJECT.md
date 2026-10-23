@@ -179,3 +179,10 @@ The transport's Hide UI / Show UI control preserves clock, perspective and trans
 panels; left card backgrounds are fully transparent. UI visibility is controlled consistently in all camera modes.
 Altitude-chart scrubbing captures pointer drags, clamps endpoints and holds playback until release, with cancellation
 cleanup and keyboard seeking. Twenty-two viewer checks pass; browser/GPU visual inspection remains pending.
+
+
+Viewer layout correction: restored glass backgrounds/borders/blur on individual left cards; only the scrolling
+container and scrollbar track are transparent. The altitude graph now keeps its 360:64 proportions at a bounded
+width instead of stretching across spare transport space. Hide/Show UI is an accessible circular panel icon at the
+right end of the transport, matching its other icon controls. Removed the wind-ribbon length caption and centred
+legend text. Existing continuous scrubbing remains intact.

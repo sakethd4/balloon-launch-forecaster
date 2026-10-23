@@ -46,7 +46,9 @@ export function initUI(S, h) {
   bindTimeline($("chart"), S, h);
   $("toggleUI").addEventListener("click", () => {
     const hidden = document.body.classList.toggle("ui-hidden");
-    $("toggleUI").textContent = hidden ? "Show UI" : "Hide UI";
+    const label = hidden ? "Show UI" : "Hide UI";
+    $("toggleUI").setAttribute("aria-label", label);
+    $("toggleUI").title = label;
     $("toggleUI").setAttribute("aria-pressed", String(hidden));
     for (const id of ["left", "legend", "details", "hud"]) $(id).inert = hidden;
   });

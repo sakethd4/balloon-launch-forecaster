@@ -32,7 +32,7 @@ Esri imagery, AWS elevation and the pinned CesiumJS/Three.js modules. No map acc
   node transforms and the cloud-distance buffer, but the duplicate is not drawn on the atmosphere canvas. Geometry
   stays at fixed 60x illustrative magnification, shrinks normally with zoom, and remains anchored to the flight position.
   It is not a life-size depiction; fill volume remains unknown. Terrain defaults to real 1x height; exaggeration is optional.
-- Wind is 2,560 ribbons by default (20% fewer than the earlier 3,200), with 10% lower opacity. Forecast advection and
+- Wind is 1,280 ribbons by default (50% fewer than the preceding 2,560), with 10% lower opacity. Forecast advection and
   smooth lifetime fades remain; decorative traveling flutter, animated curvature and pulsing heads are removed.
   Fixed metre dimensions never grow with zoom. Map wind fades at 35-70 km camera-to-balloon range; payload view retains
   its nearby wind field. Width/curvature/turbulence are illustrative, not forecast-resolved eddies.

@@ -88,7 +88,7 @@ if (!installed) {
     let calls = 0; S.grid = {at(lat,lon,alt,out) {calls++; out[0]=12;out[1]=4;out[2]=280;out[3]=70;}};
     O.camEnu.set(4000,0,1000);
     const wind = createWind(S); const mesh = O.world.children.at(-1);
-    wind.update(S,0.016); assert.equal(mesh.visible,true); assert.equal(mesh.geometry.instanceCount,2560);
+    wind.update(S,0.016); assert.equal(mesh.visible,true); assert.equal(mesh.geometry.instanceCount,1280);
     const geometry = mesh.geometry, widths = geometry.attributes.aWidth.array.slice();
     const a = geometry.attributes.aHead.array, b = geometry.attributes.aTail.array;
     for (let i=0;i<geometry.instanceCount;i++) {

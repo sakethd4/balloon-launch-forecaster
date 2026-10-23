@@ -5,7 +5,7 @@ import { EARTH_R, clamp, smoothstep, windColor } from "./util.js";
 import { windFade } from "./view-scale.js";
 
 const params = new URLSearchParams(location.search);
-const COUNT = Math.round(0.8 * (({ low: 1800, mid: 3200, high: 5000 })[params.get("q")] || 3200));
+const COUNT = Math.round(0.4 * (({ low: 1800, mid: 3200, high: 5000 })[params.get("q")] || 3200));
 
 export function createWind(S) {
   const O = S.overlay, geo = new THREE.InstancedBufferGeometry();

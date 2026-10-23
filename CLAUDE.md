@@ -234,3 +234,7 @@ Viewer wording/layout refinement: UI visibility icon moved to the transport's le
 bounded timeline, with a centred second row on smaller screens. Launch action says Choose starting location; layer
 label is simply Wind. The legend identifies air temperature as wind colour. Landing summary uses two clearly labelled
 50%/90% distances from forecast landing, a separate launch-drift row and short flight-duration/simulation count.
+
+
+Wind density reduced a further 50% across all quality presets: default 2,560 -> 1,280 ribbons.
+Ribbon size, opacity, motion and zoom fade remain unchanged.

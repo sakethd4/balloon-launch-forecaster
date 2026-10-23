@@ -159,3 +159,11 @@ Eighteen viewer checks pass, including the actual Cesium camera math; GPU visual
 Flight paths now remain legible through clouds using a narrow cloud-composite mask over the forecast, selected and
 travelled routes. Their original styling and terrain tests remain intact; balloon/cloud depth clipping is preserved.
 Twenty viewer checks pass, with GPU visual verification pending.
+
+
+Current visual maintenance: balloon rendering moved into Cesium to share terrain depth, with 1x terrain by default.
+Decorative wind flutter is removed; Top down is locked to north-up pan/zoom. Route depth now governs cloud occlusion,
+replacing the halo-producing screen-space cutout; covered map routes remain faintly visible. Professional weather-UI
+research informed consistent cool/warm colours with matching legends, explicit route/probability keys, forecast valid-time
+labels and clear separation of measured forecast inputs from illustrative effects. Sources and implementation rationale
+are recorded in web/README.md. Twenty-one viewer checks pass; GPU appearance still requires manual verification.

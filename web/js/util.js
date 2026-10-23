@@ -59,9 +59,10 @@ export const sunElevation = (date, lat, lon) => sunPosition(date, lat, lon).el;
 /** 0 at night (sun below -6 degrees) to 1 in full day (above 12 degrees). */
 export const daylight = (elDeg) => smoothstep(-6, 12, elDeg);
 
-// ---- temperature colour ramp (deg C): violet-blue (very cold) through white (0) to orange-red (hot)
-const TEMP_STOPS = [[-70, [0.48, 0.36, 1.0]], [-50, [0.24, 0.48, 1.0]], [-30, [0.21, 0.78, 1.0]], [-12, [0.72, 0.95, 1.0]],
-  [2, [1.0, 1.0, 1.0]], [12, [1.0, 0.89, 0.60]], [22, [1.0, 0.70, 0.28]], [32, [1.0, 0.42, 0.24]], [42, [1.0, 0.23, 0.23]]];
+// Fixed cool-to-warm scale: blue/neutral/orange with lightness variation and a fixed freezing reference.
+const TEMP_STOPS = [[-70, [0.08, 0.22, 0.42]], [-50, [0.14, 0.38, 0.64]], [-30, [0.32, 0.57, 0.77]],
+  [-10, [0.65, 0.8, 0.9]], [0, [0.96, 0.96, 0.94]], [10, [0.99, 0.84, 0.62]],
+  [20, [0.93, 0.60, 0.30]], [30, [0.80, 0.35, 0.12]], [40, [0.55, 0.20, 0.06]]];
 export function tempColor(tC, out = [0, 0, 0]) {
   const s = TEMP_STOPS;
   if (tC <= s[0][0]) { out[0] = s[0][1][0]; out[1] = s[0][1][1]; out[2] = s[0][1][2]; return out; }
@@ -73,9 +74,17 @@ export function tempColor(tC, out = [0, 0, 0]) {
   }
   const e = s[s.length - 1][1]; out[0] = e[0]; out[1] = e[1]; out[2] = e[2]; return out;
 }
+// Shared by the rendered wind and its legend: avoid showing an untinted key for tinted particles.
+export function windColor(tC, out = [0, 0, 0]) {
+  tempColor(tC, out); for (let i = 0; i < 3; i++) out[i] = out[i] * 0.55 + 0.45;
+  return out;
+}
 export function tempGradientCss() {
-  const lo = -60, hi = 40;
-  const stops = TEMP_STOPS.filter(([t]) => t >= lo && t <= hi).map(([t, c]) => `rgb(${c.map((x) => Math.round(x * 255)).join(",")}) ${((t - lo) / (hi - lo) * 100).toFixed(0)}%`);
+  const lo = -60, hi = 40, stops = [];
+  for (let t = lo; t <= hi; t += 10) {
+    const c = windColor(t).map(v => Math.round(v * 255));
+    stops.push(`rgb(${c.join(",")}) ${((t - lo) / (hi - lo) * 100).toFixed(0)}%`);
+  }
   return `linear-gradient(90deg, ${stops.join(", ")})`;
 }
 

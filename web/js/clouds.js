@@ -5,9 +5,9 @@
 import * as THREE from "three";
 import { clamp, mulberry32, rad } from "./util.js";
 
+import { createRouteDepth } from "./route-depth.js";
 import { cloudFade } from "./view-scale.js";
 import { CLOUD_DEPTH_FAR } from "./depth-pass.js";
-import { createRouteMask } from "./route-mask.js";
 
 const params = new URLSearchParams(location.search);
 const SCALE = Number(params.get("clouds")) || 0.5;          // render resolution of the cloud pass relative to the screen
@@ -58,6 +58,7 @@ uniform float uDepthFar;
 #include <packing>
 uniform vec3 uCam, uRight, uUp, uDir, uSun, uSunCol, uAmbTop, uAmbBot;
 uniform vec2 uGridMin, uGridSpan, uRes;
+uniform float uMaxOpacity;
 uniform float uTanY, uAspect, uTime, uZMax, uGround, uHMin, uHMax, uCover, uDensity, uOpacity;
 varying vec2 vUv;
 const float R_EARTH = 6371000.0;
@@ -154,19 +155,21 @@ void main() {
     t += dt;
   }
   col = (1.0 - exp(-col / max(1.0 - T, 0.001) * 1.15)) * (1.0 - T);                                // soft tone map
-  gl_FragColor = vec4(col, 1.0 - T) * uOpacity;                           // premultiplied
+  float alpha = 1.0 - T;
+  float displayAlpha = min(alpha, uMaxOpacity);
+  gl_FragColor = vec4(col * displayAlpha / max(alpha, 0.0001), displayAlpha) * uOpacity;                           // premultiplied
 }`;
 
 export function createClouds(S) {
   const O = S.overlay, renderer = O.renderer;
-  const routes = createRouteMask(O);
+  O.routeDepth = createRouteDepth(O);
   const quadGeo = new THREE.PlaneGeometry(2, 2);
   const mat = new THREE.ShaderMaterial({
     glslVersion: null, depthTest: false, depthWrite: false,
     uniforms: { uSceneDepth: { value: O.depth.texture }, uDepthFar: { value: CLOUD_DEPTH_FAR }, uRH: { value: null }, uNoise: { value: null }, uWeather: { value: null }, uCam: { value: new THREE.Vector3() }, uRight: { value: new THREE.Vector3() }, uUp: { value: new THREE.Vector3() },
       uDir: { value: new THREE.Vector3() }, uSun: { value: new THREE.Vector3(0, 0, 1) }, uSunCol: { value: new THREE.Color(1, 1, 1) }, uAmbTop: { value: new THREE.Color() }, uAmbBot: { value: new THREE.Color() },
       uGridMin: { value: new THREE.Vector2() }, uGridSpan: { value: new THREE.Vector2() }, uRes: { value: new THREE.Vector2() }, uTanY: { value: 0.6 }, uAspect: { value: 1.6 }, uTime: { value: 0 },
-      uOpacity: { value: 1 }, uDensity: { value: 1 }, uZMax: { value: 14000 }, uGround: { value: 150 }, uHMin: { value: 600 }, uHMax: { value: 13200 }, uCover: { value: 0 } },
+      uMaxOpacity: { value: 0.68 }, uOpacity: { value: 1 }, uDensity: { value: 1 }, uZMax: { value: 14000 }, uGround: { value: 150 }, uHMin: { value: 600 }, uHMax: { value: 13200 }, uCover: { value: 0 } },
     vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
     fragmentShader: FRAG,
   });
@@ -175,9 +178,9 @@ export function createClouds(S) {
   const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.UnsignedByteType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
   const comp = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
     transparent: true, depthTest: false, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
-    uniforms: { tex: { value: rt.texture }, pathMask: { value: routes.texture } },
+    uniforms: { tex: { value: rt.texture } },
     vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
-    fragmentShader: "uniform sampler2D tex, pathMask; varying vec2 vUv; void main(){ gl_FragColor = texture2D(tex, vUv) * (1.0 - texture2D(pathMask, vUv).r); }" }));
+    fragmentShader: "uniform sampler2D tex; varying vec2 vUv; void main(){ gl_FragColor = texture2D(tex, vUv); }" }));
   comp.frustumCulled = false; comp.renderOrder = 1000; comp.visible = false;
   O.scene.add(comp);
   mat.uniforms.uNoise.value = noiseTexture(64);
@@ -199,8 +202,7 @@ export function createClouds(S) {
     mat.uniforms.uOpacity.value = fade;
     if (!comp.visible) return;
     const dom = renderer.domElement, sc = SCALE * (0.55 + 0.45 * S.quality), w = Math.max(2, Math.round(dom.width * sc)), h = Math.max(2, Math.round(dom.height * sc));
-    // Route selection must update immediately, even if the stationary cloud texture is being reused.
-    routes.update(S.flight, S.follow, S.t, w, h);
+    const routesChanged = O.routeDepth.update(S,w,h);
     const resized = rt.width !== w || rt.height !== h;
     if (resized) rt.setSize(w, h);
     const now = performance.now();
@@ -208,7 +210,7 @@ export function createClouds(S) {
       && st.dir.distanceToSquared(O.camBasis.dir) < 1e-12 && st.up.distanceToSquared(O.camBasis.up) < 1e-12
       && st.fov === O.camera.fov && st.mode === S.cam;
     // Reuse a stationary view for at most 33 ms; camera movement always renders immediately.
-    if (!resized && stable && now - st.lastRender < 33) return;
+    if (!resized && !routesChanged && stable && now - st.lastRender < 33) return;
     st.lastRender = now; st.balloon.copy(S.enu); st.camera.copy(O.camEnu); st.dir.copy(O.camBasis.dir); st.up.copy(O.camBasis.up);
     st.fov = O.camera.fov; st.mode = S.cam;
     const u = mat.uniforms, b = O.camBasis;
@@ -220,6 +222,7 @@ export function createClouds(S) {
     u.uAmbTop.value.setRGB(0.52, 0.64, 0.86).multiplyScalar(0.05 + 0.95 * k).lerp(new THREE.Color(1.0, 0.62, 0.45), dusk * 0.3 * k);
     u.uAmbBot.value.setRGB(0.30, 0.33, 0.38).multiplyScalar(0.03 + 0.7 * k);
     u.uGround.value = S.data.meta.launch.ground_m;
+    u.uMaxOpacity.value = S.cam === "balloon" ? 1 : 0.68;
     u.uDensity.value = S.cam === "balloon" ? 1.0 : 0.3;          // a thin veil on the map views, so the path and landing zone stay readable
     O.depth.render(w, h);
     renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(rtScene, rtCam); renderer.setRenderTarget(null);

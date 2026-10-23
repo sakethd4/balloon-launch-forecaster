@@ -21,6 +21,7 @@ const S = {
   bearing: 0, sphere: null, firstLoad: true, layers: {}, heading: null, quality: 1, frameMs: 16, adaptAt: 0,
 };
 window.__S = S;
+S.reportVisualError = ui.toast;
 
 async function getJSON(url, opts) {
   const r = await fetch(url, opts), j = await r.json();
@@ -90,7 +91,7 @@ const handlers = {
     if (S.flight) S.flight.setVisible({ dots: S.layers.dots, rings: S.layers.rings, hidden: S.cam === "balloon" });
     const [, wind, clouds, birds] = S.modules;
     wind.setVisible(S.layers.wind); clouds.setVisible(S.layers.clouds); birds.setVisible(S.layers.birds);
-    $("legend").style.display = S.layers.wind ? "" : "none";
+    $("windLegend").hidden = !S.layers.wind;
   },
   exaggeration(v) { S.earth.scene.verticalExaggeration = v; },
 };

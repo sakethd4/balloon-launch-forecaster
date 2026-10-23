@@ -1,112 +1,93 @@
-# Launch Planner (3D web app)
+# Launch Planner
 
-Run it (needs the GFS/GEFS files in `~/balloon-data` and `wind_error_full.joblib` from `scripts.wind_error_model`):
+From the project root:
 
-    python -u -W ignore -m scripts.serve        # then open http://localhost:8000
+```powershell
+conda activate balloon
+python -u -W ignore -m scripts.serve
+```
 
-The server (standard library only) serves this folder and simulates a launch on request: `/api/case?lat=&lon=&lead=&init=&n=`
-flies 100 sampled balloons through the archived GFS forecast with the vectorised 4D simulator (about 0.6 s) and returns the
-flights plus a gridded snapshot of wind, temperature and humidity around the launch. The page needs internet for the map
-imagery, the elevation tiles and the CesiumJS/Three.js libraries (all loaded from public CDNs, no keys).
+Open http://localhost:8000 and use Ctrl+F5 after viewer changes. Keep the terminal running; Ctrl+C stops the server.
+The app needs the local GFS/GEFS archives and `wind_error_full.joblib` in `~/balloon-data`. Internet is needed for
+Esri imagery, AWS elevation and the pinned CesiumJS/Three.js modules. No map account/key or paid service is required.
 
-What you can do: pick any launch point inside the bright area of the map, pick the launch hour, watch the flight, click a dot
-(a possible flight) to see its landing and follow it, and ride the balloon (Balloon cam: drag to look around, scroll to zoom).
+## Viewer behavior
 
-Modules (`js/`): `earth` (terrain, imagery, bounds), `flight` (path, dots, rings), `overlay` (Three.js layer locked to Cesium's camera),
-`balloon`, `wind`, `clouds`, `birds` (the 3D scene), `cameras`, `ui`, `main`.
+- Click the map or a preset to choose a launch site; choose the archived launch hour. The Python server flies 100
+  sampled flights on demand (`/api/case`). Blue is the forecast route, amber the selected/followed route, and pale blue
+  the travelled trail. Landing circles summarize the simulated distribution: 50% solid, 90% dashed.
+- Click a flight or landing point to inspect it. Follow closes the drawer; Stop following is beside the camera controls.
+  Selecting another flight previews its route without switching the followed balloon until Follow is pressed.
+- Orbit has free globe controls. Chase uses drag to orbit the balloon and the wheel to zoom, with bounded pitch/range
+  and terrain clearance. Balloon cam rides the payload, with drag to look and wheel to change field of view.
+  **Top down is north-up only: drag pans horizontally and the wheel zooms; no rotation, tilt or roll.**
+- The balloon renders as a native Cesium glTF model, sharing terrain depth. Its existing Three.js animation supplies
+  node transforms and the cloud-distance buffer, but the duplicate is not drawn on the atmosphere canvas. Geometry
+  stays at fixed 60x illustrative magnification, shrinks normally with zoom, and remains anchored to the flight position.
+  It is not a life-size depiction; fill volume remains unknown. Terrain defaults to real 1x height; exaggeration is optional.
+- Wind is 2,560 ribbons by default (20% fewer than the earlier 3,200), with 10% lower opacity. Forecast advection and
+  smooth lifetime fades remain; decorative traveling flutter, animated curvature and pulsing heads are removed.
+  Fixed metre dimensions never grow with zoom. Map wind fades at 35-70 km camera-to-balloon range; payload view retains
+  its nearby wind field. Width/curvature/turbulence are illustrative, not forecast-resolved eddies.
+- Cloud placement uses a local GFS forecast humidity snapshot (0.5-degree horizontal spacing, resampled every 500 m
+  to 14 km, roughly +/-2 degrees around the launch). Shapes and slow evolution are procedural, not satellite imagery.
+  Dry gaps may come from forecast moisture or procedural shaping; outer data/zoom edges are display limits.
+- Cloud rays stop at balloon geometry and exact-width route depth strokes. Clouds behind a route do not cover its
+  stroke; cloud between the camera and route attenuates it. Map cloud opacity is limited to 68%, keeping covered
+  sections faintly visible; payload clouds can remain opaque. **No wide cloud cutout or path halo is used.** The route
+  depth pass uses the actual 3 / 3.5 / 4 CSS-pixel strokes, with no surrounding terrain strip. Cesium terrain depth is
+  still not shared with the cloud pass itself. Low-resolution cloud silhouettes need final GPU inspection.
+- Landing markers clamp to terrain and draw without half-clipping. Terrain uses border-aware Web-Mercator sampling,
+  parent surfaces while tiles load/retry, bounded requests and caches, plus ancestor/sibling preloading. Some progressive
+  detail refinement is normal on first visits or slow networks.
 
-URL options for testing: `?lat=&lon=&lead=&cam=orbit|chase|balloon|top&t=0..1&speed=&play=1&select=&follow=&q=low|mid|high&clouds=0.35&adapt=1`.
+## Weather UI principles applied
 
-Imagery: Esri World Imagery. Elevation: AWS Terrain Tiles. Attribution is shown in the page.
+These are implementation choices informed by professional guidance, rather than a claim that a source endorses the
+app's exact display settings:
 
-Rendering fixes (2026-10-22):
+| Guidance | Application |
+| --- | --- |
+| [Met Office forecast colour scales](https://weather.metoffice.gov.uk/learn-about/how-forecasts-are-made/forecast-colour-scales): consistent scales, lightness differences and accessible cool/warm hues. | Fixed blue-neutral-orange temperature scale, a fixed freezing reference, numerical Celsius ticks, and the same colour function for wind and legend, including both scale endpoints. |
+| [NOAA probabilistic decision support](https://www.weather.gov/tbw/probabilistic): show the range of possible solutions and uncertainty. | Preserve ensemble flights and 50%/90% landing rings; label their solid/dashed styles and forecast/selected routes explicitly. Decorative atmosphere stays secondary to the analytical display. |
+| [ECMWF forecast charts](https://www.ecmwf.int/): distinguish forecast base time, lead and valid time. | Launch controls retain initialization/lead information; the legend shows the weather snapshot's UTC valid time and identifies GFS forecast data. Procedural clouds and illustrative balloon size are stated. |
+| [Cesium native models](https://cesium.com/learn/cesiumjs/ref-doc/Model.html): local-frame models participate in the 3D scene. | Balloon/terrain occlusion uses the globe renderer, instead of a separate canvas pretending to share terrain depth. Top view has predictable map-only navigation. |
 
-- The balloon stays anchored to the simulated payload position with a fixed 60x illustrative magnification in every
-  camera mode. It shrinks naturally on zoom out; it is not a life-size depiction. Chase view shows the model clearly.
-  The overlay preserves the globe camera pose through Three.js matrix updates.
-- Possible-flight dots have smaller, subdued markers with terrain depth testing, avoiding the bright launch-site pileup.
-- Wind uses curved, soft air ribbons: 40-240 m long and 2.5-4.5 m wide in balloon cam; map views use 120-600 m by 12-20 m ribbons, transported by forecast winds.
-  Dimensions never grow with camera distance. Removed the expanding coloured haze puffs and bright particle heads.
-  Wind fades from 35 to 70 km camera-to-balloon range in orbit/chase/top views and fully stops beyond that;
-  balloon cam keeps its nearby air field. Display turbulence and ribbon curvature are illustrative.
-- Clouds intersect a curved altitude volume, clip to the forecast domain with soft edges, and use stable ray samples.
-  Humidity controls billow coverage; exact cloud shapes remain illustrative. Clouds render from above and below,
-  with domain-warped, differently rotated/scaled detail and slowly evolving non-periodic weather-scale variation.
-  In orbit/chase/top views clouds fade from 65 to 120 km camera-to-balloon range and fully stop beyond that,
-  hiding the forecast square in wide views. They remain an overlay without access to Cesium's terrain depth texture.
-- Following a possible flight preserves its complete projected route even when the selection drawer closes.
-- All camera modes enforce 2 m clearance above the currently loaded terrain, including terrain exaggeration.
-  Terrain accuracy depends on the elevation tiles that have loaded.
-- Full visual quality is the default. `?adapt=1` opts into the previous automatic resolution/particle reductions.
-  Optimizations reuse interpolation scratch buffers, avoid rebuilding paused flight geometry, throttle telemetry DOM
-  updates to 10 Hz, and skip cloud ray marching outside the forecast volume. Wind now samples 2,560 ribbons rather
-  than 9,000 streaks plus puffs; hidden fields skip CPU sampling and buffer uploads. Cloud textures are reused for up to
-  33 ms only when the viewpoint is stationary; moving the camera renders immediately. Projection matrices update only
-  when the field of view or aspect ratio changes.
+The native model is built once with the pinned Three.js GLTFExporter. If that renderer fails, the app reports it and
+falls back to the older overlay balloon; that fallback cannot share terrain depth. No credentials are involved.
 
-Checks: `node --test tests/viewer.test.mjs tests/viewer-render.test.mjs tests/viewer-camera.test.mjs` (20 passing checks including terrain continuity/retries, imagery throttling, follow controls, camera transforms,
-balloon anchoring/scale, ribbon dimensions and hidden-field render/sampling skips). The seven Three.js integration tests
-use the app's pinned library in ignored `dist/viewer-check/three.mjs`; without it they report a skip. To obtain it:
+## Performance and verification
+
+Full quality is the default. `?adapt=1` opts into automatic resolution/particle reductions. Hidden weather fields skip
+simulation/drawing; stationary cloud frames cache for at most 33 ms. Route depth geometry caches until flight/selection
+changes. Grid interpolation reuses buffers; telemetry DOM updates at 10 Hz. Native balloon rendering avoids the unused
+Three.js sky-environment regeneration. Cloud and route/balloon distance targets are reused.
+
+URL options: `?lat=&lon=&lead=&cam=orbit|chase|balloon|top&t=0..1&speed=&play=1&select=&follow=&q=low|mid|high&clouds=0.5&adapt=1`.
+
+Run checks:
+
+```powershell
+node --test tests/viewer.test.mjs tests/viewer-render.test.mjs tests/viewer-camera.test.mjs
+conda run -n balloon python -m pytest -q
+```
+
+The optional integration checks require these pinned modules in ignored `dist/`:
 
 ```powershell
 New-Item -ItemType Directory -Force dist/viewer-check | Out-Null
 Invoke-WebRequest -Uri 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js' -OutFile 'dist/viewer-check/three.mjs'
+Invoke-WebRequest -Uri 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/exporters/GLTFExporter.js' -OutFile 'dist/viewer-check/GLTFExporter.mjs'
+Invoke-WebRequest -Uri 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/utils/TextureUtils.js' -OutFile 'dist/viewer-check/TextureUtils.mjs'
 Invoke-WebRequest -Uri 'https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/Cesium.js' -OutFile 'dist/viewer-check/cesium.cjs'
 ```
 
-Two additional camera tests use the pinned Cesium runtime above (and skip if it is missing).
-The renderer is stubbed in the Three.js tests: they exercise real Three.js geometry/matrices, not GPU shader compilation or
-visual quality. The Python suite passed all 45 tests during the preceding viewer fix; this follow-up changes only the viewer.
-All viewer JavaScript files pass syntax checks. No connected browser was available for visual QA; cloud appearance and
-real-GPU frame rate still need verification on the laptop. Suggested checks: Chase to inspect the balloon, then zoom
-out; wind in orbit/top at 5-10 km and beyond 70 km; cloud detail from balloon cam and beyond 120 km in map modes;
-balloon cam looking down near launch and aloft; follow a dot and close its drawer; drag below exaggerated terrain.
+**21 viewer checks pass**, including the actual Cesium camera math, real GLB export/node synchronization, route depth
+widths/pass ordering, terrain seams/retries and legend consistency. JavaScript syntax checks pass. The Three.js renderer
+and Cesium model drawing are stubbed, so these checks do not validate GPU shader compilation or final appearance.
+The browser tool reports no available in-app browser; manual GPU inspection remains necessary. The preceding backend
+suite passed 45 tests; this change does not modify the backend or forecasts.
 
-Follow/terrain maintenance (2026-10-22):
-
-- Landing dots use terrain-clamped Entity points, not unsupported `heightReference` on raw PointPrimitives.
-  Landing/launch markers and selected landing rings draw without terrain depth clipping at every zoom.
-- Selecting another balloon previews that flight's complete route until the drawer closes or Follow is pressed;
-  the active followed route no longer overwrites the preview every frame. Follow closes the drawer. Stop following
-  is integrated beside the camera modes and returns to Orbit; clicking the followed balloon also offers Stop following.
-  The separate following bubble and top-left title were removed. Left cards are anchored 26 px above the bottom.
-- Clouds retain more density in humid forecast layers: weather variation modulates shape without suppressing nearly
-  the entire humidity signal. Clouds remain absent where the forecast is dry. Wider map-view wind keeps its geometry
-  fixed during zoom and fades spatially around the balloon, rather than vanishing when the camera leaves the air field.
-  Balloon-cam wind is unchanged.
-- Terrain now uses the source Web-Mercator tiling with border-aware sampling and genuine elevations at coarse levels.
-  Incomplete or failed elevation tiles retain the parent surface and retry; they never become zero-filled terrain patches.
-  Six heightmap loads may run concurrently, with 300 generated heightmaps and 300 globe tiles retained in memory;
-  sibling/ancestor preloading helps pan/zoom. Failed decoded DEMs are evicted so they can retry. Imagery preserves Cesium's
-  synchronous throttle signal. Relief shading uses a normal/light dot product instead of per-pixel trigonometry.
-- Same free Esri imagery and AWS elevation sources; no account or paid service added. Tile detail will still stream and
-  refine as you move, especially on first visits or slow connections. GPU terrain appearance remains unverified because
-  the browser tool reports Edge unavailable. Tests cover synthetic terrain edges and refinement, retry/throttling,
-  selection transitions, follow button behavior, and the wider atmosphere visibility limits.
-
-Wind/camera/cloud-depth maintenance (2026-10-22):
-
-- Wind count reduced 20% at every preset (default 3,200 -> 2,560), with 10% lower opacity. A traveling, tapered
-  vertex wave and width flutter animate along each ribbon independently of the forecast advection; this motion is illustrative.
-- Chase now uses a controlled heading/pitch/range in the followed balloon's local east/north/up frame, with drag to orbit
-  and wheel to zoom. Pitch stays between -85 and +75 degrees, range between 120 m and 200 km. Terrain clearance clamps
-  the orbit state rather than letting Cesium tracking/collision/inertia fight each other. Leaving a manual mode clears
-  its camera transform and restores normal controls. Changing launch sites cancels old camera motion and resets the local frame.
-- Clouds have a balloon-geometry distance prepass. Their ray march stops at the visible balloon surface; clouds behind
-  the balloon no longer wash over it, while cloud between the camera and balloon can still obscure it. Invisible burst
-  flashes are excluded. This buffer is reused with the existing stationary-view cache and skipped when clouds are hidden.
-  It does not include Cesium terrain depth, and low-resolution cloud edges can still need GPU visual tuning.
-- Cloud placement uses real GFS forecast relative humidity on the 0.5-degree grid, resampled vertically every 500 m
-  up to 14 km. It is a local snapshot (roughly +/-2 degrees around the launch), not satellite cloud imagery or an observed
-  cloud map. Moisture above roughly 74% seeds procedural clouds. Fine outlines, billows, gaps and their slow animation are
-  illustrative. Dry forecast regions can have no cloud; straight outer edges or wide-zoom fades are display/data limits,
-  not real weather boundaries. Hover the Clouds layer label for this distinction.
-- Verification: 18 viewer checks pass, including real Cesium ground-limit/relocation tests and depth-pass isolation/state
-  restoration. JavaScript syntax checks pass. Browser/GPU shader appearance remains unverified in this session.
-
-Flight-path visibility (2026-10-22): cloud compositing now clears a narrow, antialiased screen-space strip over the
-nominal route, selected route and travelled trail. This reveals the original Cesium path styling while preserving its
-terrain tests; it does not move the trajectories or alter balloon/cloud depth clipping. The mask follows camera movement,
-selection and playback immediately, even when cloud shading reuses a cached frame. It is cached for unchanged views,
-blank in balloon cam, and skipped when clouds are hidden. Projection clips segments before perspective division so
-near-camera paths cannot create screen-filling strokes. Twenty viewer checks pass; final GPU appearance is unverified.
+Suggested GPU checks: near-ground Chase with hills crossing the balloon silhouette; above/below-cloud route angles
+without terrain halos; payload wind without flutter; repeated Top-view drags preserving north-up/nadir; launch changes,
+burst/parachute animation, and all weather layer toggles. Imagery/elevation attribution remains on the map.

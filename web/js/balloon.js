@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { clamp, lerp, mulberry32, rad, smoothstep } from "./util.js";
 
+import { createNativeBalloon } from "./native-balloon.js";
 import { BALLOON_DISPLAY_SCALE } from "./view-scale.js";
 const LINE_LEN = 9;                       // metres from the envelope down to the payload
 const D0 = 1.4;                           // envelope diameter at launch (m), illustrative
@@ -104,8 +105,10 @@ export function createBalloon(S) {
   }
   sway.add(shreds); shreds.visible = false;
 
+  const native = createNativeBalloon(S, root);
   const st = { phase: null, since: 0, lastT: 0, envTexture: null, envK: -1, envEl: 99, popAt: -1 };
   const self = {
+    ready: native.ready,
     onCase() { st.phase = null; st.popAt = -1; },
     setVisible(v) { self.visible = v; },
     visible: true,
@@ -119,7 +122,7 @@ export function createBalloon(S) {
       O.sun.position.copy(O.sunDirection(el, S.sun.az)).multiplyScalar(1000); O.sun.target.position.set(0, 0, 0);
       O.sun.intensity = 0.1 + 3.4 * k * (0.35 + 0.65 * clamp(el / 25, 0, 1)); O.sun.color.setHSL(0.1, 0.5 * (1 - clamp(el / 20, 0, 1)) + 0.05, 0.92 - 0.12 * (1 - clamp(el / 20, 0, 1)));
       O.hemi.intensity = 0.15 + 0.85 * k;
-      if (Math.abs(k - st.envK) > 0.06 || Math.abs(el - st.envEl) > 4) {
+      if (native.failed && (Math.abs(k - st.envK) > 0.06 || Math.abs(el - st.envEl) > 4)) {
         if (st.envTexture) st.envTexture.dispose();
         st.envTexture = skyEnvironment(O.renderer, k, el); O.scene.environment = st.envTexture; st.envK = k; st.envEl = el;
       }
@@ -164,6 +167,7 @@ export function createBalloon(S) {
           else shredData.forEach((s) => { const a = Math.max(popAge, 0); s.m.position.set(s.v.x * a * 0.7, s.v.y * a * 0.7, L + d * 0.5 + s.v.z * a * 0.7 - 1.2 * a * a); s.m.rotation.set(s.w.x * a, s.w.y * a, s.w.z * a); s.m.material.opacity = clamp(1.5 - a / 5, 0, 1); });
         }
       }
+      native.update();
     },
   };
   return self;

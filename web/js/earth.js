@@ -127,7 +127,7 @@ export function createEarth(region) {
   });
   const scene = viewer.scene, camera = viewer.camera, ctrl = scene.screenSpaceCameraController;
   viewer.clock.clockRange = C.ClockRange.CLAMPED;
-  scene.verticalExaggeration = 1.8;
+  scene.verticalExaggeration = 1;
   scene.globe.depthTestAgainstTerrain = true;
   scene.globe.maximumScreenSpaceError = 1.6;
   scene.globe.tileCacheSize = 300;
@@ -187,7 +187,7 @@ export function createEarth(region) {
     const local = C.Matrix4.multiplyByPointAsVector(camera.inverseTransform, delta, new C.Cartesian3());
     C.Cartesian3.add(camera.position, local, camera.position);
   }
-  return { viewer, scene, camera, enforceClearance, Cesium: C };
+  return { viewer, scene, camera, region, enforceClearance, Cesium: C };
 }
 
 /** Night dims the imagery, sky and haze; day restores them. k in [0, 1]. */

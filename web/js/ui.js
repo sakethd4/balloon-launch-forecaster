@@ -93,7 +93,8 @@ export function launchDate(S, lead) { return new Date(Date.parse(S.run + "T12:00
 export function renderTimeCard(S) {
   const when = launchDate(S, S.lead), l = local(when);
   $("launchBig").textContent = `${l.weekday}, ${l.month} ${l.day} · ${l.hour}:${l.minute} ${l.dayPeriod} ${l.timeZoneName}`;
-  $("launchSmall").textContent = `${utcText(when)}  ·  forecast hour +${S.lead} of the ${S.run.slice(5)} 12Z run`;
+  if (S.data) $("weatherStamp").textContent = `GFS forecast \u00b7 valid ${new Date(S.launchMs + S.data.meta.flight_time_s * 500).toISOString().slice(0,16).replace("T"," ")} UTC`;
+  $("launchSmall").textContent = `Launch ${utcText(when)} \u00b7 GFS ${S.run} 12Z \u00b7 +${S.lead}h`;
   const days = new Map();
   for (let ld = S.region.lead_min_h; ld <= S.region.lead_max_h; ld++) { const k = localDayKey(launchDate(S, ld)); if (!days.has(k)) days.set(k, []); days.get(k).push(ld); }
   const cur = localDayKey(when), box = $("dateChips");

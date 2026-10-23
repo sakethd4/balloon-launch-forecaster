@@ -147,3 +147,12 @@ test('follow controls toggle follow/stop without treating the stop button as a c
   elements.get('camModes').listeners.click({target:{closest:()=>({dataset:{}})}}); assert.equal(calls.length,0);
   UI.setFollowing(-1); assert.equal(elements.get('stopFollow').hidden,true);
 });
+
+const {windColor,tempGradientCss}=await import(util);
+test('temperature legend uses the rendered fixed colour scale including both endpoints',()=>{
+  const cold=windColor(-60), warm=windColor(40), freezing=windColor(0), css=tempGradientCss();
+  assert.ok(cold[2]>cold[0]); assert.ok(warm[0]>warm[2]);
+  assert.ok(Math.abs(freezing[0]-freezing[2])<0.02);
+  const rgb=c=>`rgb(${c.map(v=>Math.round(v*255)).join(',')})`;
+  assert.ok(css.includes(rgb(cold)+' 0%')); assert.ok(css.includes(rgb(warm)+' 100%'));
+});

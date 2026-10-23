@@ -32,7 +32,8 @@ export function createOccluderDepth(O) {
     render(width, height) {
       if (target.width !== width || target.height !== height) target.setSize(width, height);
       const hidden = [], hide = object => { hidden.push([object, object.visible]); object.visible = false; };
-      const previous = O.scene.overrideMaterial;
+      const previous = O.scene.overrideMaterial, cameraLayers = O.camera.layers.mask, autoClear = O.renderer.autoClear;
+      const balloonVisible = O.occluders.visible, routesVisible = O.routeDepth?.group.visible;
       try {
         for (const object of O.scene.children) if (object !== O.world) hide(object);
         for (const object of O.world.children) if (object !== O.occluders) hide(object);
@@ -40,11 +41,16 @@ export function createOccluderDepth(O) {
           // Invisible burst flashes must not cut holes in the clouds.
           if (object.isMesh && object.material.transparent && object.material.opacity < 0.01) hide(object);
         });
-        O.scene.overrideMaterial = material;
+        O.scene.overrideMaterial = material; O.camera.layers.enable(1);
         O.renderer.setRenderTarget(target); O.renderer.setClearColor(0xffffff, 1); O.renderer.clear();
         O.renderer.render(O.scene, O.camera);
+        if (routesVisible) {
+          O.scene.overrideMaterial = null; O.occluders.visible = false; O.routeDepth.group.visible = true;
+          O.renderer.autoClear = false; O.renderer.render(O.scene, O.camera);
+        }
       } finally {
-        O.scene.overrideMaterial = previous;
+        O.scene.overrideMaterial = previous; O.camera.layers.mask = cameraLayers; O.renderer.autoClear = autoClear;
+        O.occluders.visible = balloonVisible;
         for (const [object, visible] of hidden) object.visible = visible;
         O.renderer.setRenderTarget(null); O.renderer.setClearColor(0x000000, 0);
       }

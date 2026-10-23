@@ -61,4 +61,21 @@ if(!installed) {
     assert.ok(C.Matrix4.equals(camera.transform,C.Matrix4.IDENTITY));
     assert.equal(cameras.earth.scene.screenSpaceCameraController.enableInputs,false);
   });
+  test('top view pans and zooms while remaining north-up with no tilt or roll',()=>{
+    const {cameras,camera,handlers,ctx}=fixture(); const target=ctx.sphere.center;
+    cameras.setMode('top',ctx); cameras.update(target,0);
+    const old={...cameras.top}; handlers.pointerdown({clientX:0,clientY:0,pointerId:1});
+    for(let i=1;i<=20;i++) {
+      handlers.pointermove({clientX:i*20,clientY:i*10});
+      handlers.wheel({deltaY:i%2?1:-1,preventDefault(){}}); cameras.update(target,i);
+      const normal=C.Ellipsoid.WGS84.geodeticSurfaceNormal(camera.positionWC,new C.Cartesian3());
+      assert.ok(C.Cartesian3.dot(camera.directionWC,normal)<-0.999999);
+      assert.ok(Math.abs(camera.roll)<1e-7);
+    }
+    assert.notEqual(cameras.top.longitude,old.longitude); assert.notEqual(cameras.top.latitude,old.latitude);
+    assert.equal(cameras.earth.scene.screenSpaceCameraController.enableInputs,false);
+    cameras.setMode('chase',ctx); cameras.update(target,21);
+    assert.equal(cameras.mode,'chase'); assert.ok(camera.positionWC.x===camera.positionWC.x);
+  });
+
 }

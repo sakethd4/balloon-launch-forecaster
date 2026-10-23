@@ -33,8 +33,8 @@ export class Flight {
 
     // forecast path, coloured by height, over a dark underlay
     const n = this.nom.length;
-    this.underlay = prim(new C.Primitive({ geometryInstances: new C.GeometryInstance({ geometry: new C.PolylineGeometry({ positions: this.nom, width: 7,
-      vertexFormat: C.PolylineColorAppearance.VERTEX_FORMAT, colors: new Array(n).fill(C.Color.BLACK.withAlpha(0.38)), colorsPerVertex: true }) }),
+    this.underlay = prim(new C.Primitive({ geometryInstances: new C.GeometryInstance({ geometry: new C.PolylineGeometry({ positions: this.nom, width: 5,
+      vertexFormat: C.PolylineColorAppearance.VERTEX_FORMAT, colors: new Array(n).fill(C.Color.BLACK.withAlpha(0.25)), colorsPerVertex: true }) }),
     appearance: new C.PolylineColorAppearance({ translucent: true }), asynchronous: false }));
     this.pathPrim = prim(new C.Primitive({ geometryInstances: new C.GeometryInstance({ geometry: new C.PolylineGeometry({ positions: this.nom, width: 3,
       vertexFormat: C.PolylineColorAppearance.VERTEX_FORMAT, colors: d.alt_m.map((a) => rampColor(a / 13716, 0.9)), colorsPerVertex: true }) }),
@@ -77,13 +77,13 @@ export class Flight {
     // path of the selected flight, and a ring on its landing
     this.selPositions = [];
     this.selEnt = ent({ polyline: { positions: new C.CallbackProperty(() => this.selPositions, false), width: 3.5,
-      material: new C.PolylineGlowMaterialProperty({ glowPower: 0.25, color: C.Color.fromCssColorString("#ffd27a") }) }, show: false });
+      material: C.Color.fromCssColorString("#ffd27a") }, show: false });
     this.selRing = ent({ position: new C.CallbackProperty(() => this.selEnd || C.Cartesian3.ZERO, false), point: { pixelSize: 17, color: C.Color.TRANSPARENT,
       outlineColor: C.Color.fromCssColorString("#ffd27a"), outlineWidth: 3, heightReference: C.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY }, show: false });
     // trail of the followed balloon
     this.trailPositions = [];
     this.trail = ent({ polyline: { positions: new C.CallbackProperty(() => this.trailPositions, false), width: 4,
-      material: new C.PolylineGlowMaterialProperty({ glowPower: 0.3, color: C.Color.fromCssColorString("#9fd2ff") }) } });
+      material: C.Color.fromCssColorString("#9fd2ff") } });
   }
 
   /** ECEF position of balloon `who` (-1 = the forecast balloon, k >= 0 = possible flight k) at flight time t. */

@@ -1,7 +1,7 @@
 // Forecast-driven air ribbons. Geometry is measured in metres; the field never grows with zoom.
 // Curvature is illustrative sub-grid motion, while transport and colour use forecast wind/temperature.
 import * as THREE from "three";
-import { EARTH_R, clamp, smoothstep, tempColor } from "./util.js";
+import { EARTH_R, clamp, smoothstep, windColor } from "./util.js";
 import { windFade } from "./view-scale.js";
 
 const params = new URLSearchParams(location.search);
@@ -32,10 +32,7 @@ export function createWind(S) {
         vec2 normal = vec2(-tangent.y, tangent.x) / max(length(tangent), 0.001);
         vec4 p = mix(a, b, s);
         // Bend the centre line; width and curvature remain in world metres.
-        float phase = dot(aHead.xy, vec2(0.0013, 0.0017));
-        float wave = sin(s * 12.5663706 - uTime * 2.4 + phase) * aWidth * 1.8;
-        float envelope = sin(s * 3.14159265);
-        p.xy += normal * (envelope * (aBend + wave) + position.y * aWidth * (0.85 + 0.15 * cos(s * 9.0 - uTime * 1.8 + phase)));
+        p.xy += normal * (sin(s * 3.14159265) * aBend + position.y * aWidth);
         gl_Position = projectionMatrix * p;
         if (a.z > -0.5 || b.z > -0.5) gl_Position = vec4(3, 3, 3, 1);
         vUv = vec2(s, position.y * 2.0); vColor = aColor;
@@ -45,8 +42,8 @@ export function createWind(S) {
       void main() {
         float ends = pow(max(sin(vUv.x * 3.14159265), 0.0), 1.2);
         float across = exp(-vUv.y * vUv.y * 4.5);
-        float breath = 0.75 + 0.25 * sin(vUv.x * 10.0 - uTime * 1.6);
-        gl_FragColor = vec4(vColor.rgb, vColor.a * ends * across * breath);
+
+        gl_FragColor = vec4(vColor.rgb, vColor.a * ends * across * 0.85);
       }`,
   });
   const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = 10;
@@ -96,10 +93,10 @@ export function createWind(S) {
         heads[j] = e; heads[j + 1] = n; heads[j + 2] = z;
         tails[j] = e - u / norm * length; tails[j + 1] = n - v / norm * length; tails[j + 2] = z;
         widths[i] = ride ? 2.5 + 2 * smoothstep(0, 30, speed) : 12 + 8 * smoothstep(0, 30, speed);
-        bends[i] = Math.sin(i * 2.399 + time * 0.18) * length * 0.15;
-        tempColor(sample[2], rgb);
+        bends[i] = Math.sin(i * 2.399) * length * 0.15;
+        windColor(sample[2], rgb);
         // Subtle tint: avoid a solid blue cloud when many trails overlap.
-        for (let c = 0; c < 3; c++) colors[k + c] = rgb[c] * 0.55 + 0.45;
+        for (let c = 0; c < 3; c++) colors[k + c] = rgb[c];
         const dist = Math.hypot(e - camera.x, n - camera.y, z - camera.z);
         const fieldDist = Math.hypot(e - focus.x, n - focus.y);
         const lifeFade = Math.min(age[i] / 1.5, (life[i] - age[i]) / 2, 1);

@@ -188,3 +188,24 @@ clipping. Update the mask before the cloud-cache early return so selection/playb
 segments in homogeneous coordinates before dividing by w; skip unchanged/blank masks and all work when clouds hide.
 20 viewer checks pass, including route visibility/cache/selection and near/side/behind-camera clipping. GPU appearance
 remains unverified. No backend or forecast changes.
+
+### Native balloon / map-view corrections and weather-UI research (2026-10-22)
+
+Supersedes the preceding route-mask approach: removed the screen-space cloud cutout (it created visible terrain halos).
+Balloon now exports once as a Cesium glTF model via the pinned Three GLTFExporter; mirror node matrices/visibility and
+use the launch ENU model frame, Z up/X forward, no minimum pixel floor and fixed 60x illustration scale. The Three source
+is layer 1 only, reserved for cloud depth; if native loading fails, report and explicitly fall back to overlay rendering.
+Default terrain exaggeration is now 1x. Cloud prepass adds exact-width route depth geometry after balloon depth, retaining
+the depth buffer. Routes above cloud retain their strokes; those behind cloud attenuate naturally. Cap map cloud opacity
+at 0.68, keep full payload density, and remove glow styling/fat underlay. No route halo mask. Terrain depth still is not
+shared with the cloud pass itself. Native animation transforms are copied from a stable export snapshot; avoid obsolete
+static-bound culling and skip unused Three PMREM generation unless the fallback is active.
+Removed decorative wind flutter, animated bend and brightness pulse; forecast transport/lifetime fade remain. Top is
+manual north-up nadir pan/zoom only, with bounded map coordinates/height, no tilt/rotation/roll. Restore controls on exit.
+Research: Met Office colour guidance -> fixed blue/neutral/orange ramp and exact shared wind/legend colour function;
+NOAA probabilistic visualization -> explicit forecast/selected and solid50/dashed90 keys; ECMWF base/valid presentation ->
+weather snapshot UTC stamp alongside init/lead controls. Legend persists when wind hides; labels distinguish procedural
+clouds and illustrative model size. Sources and mappings are in web/README.md. No forecast/ML changes.
+21 Node checks pass (actual Cesium camera math incl. top pan/zoom, real glTF export and mirrored model node transforms,
+cloud route depth widths/pass ordering, terrain retry/seams and palette/legend consistency). JS syntax checks pass.
+GPU rendering/model drawing remain unverified: browser tool reports IAB unavailable. See web/README.md for setup/QA.

@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile, access } from 'node:fs/promises';
 import { test } from 'node:test';
 const vendor = new URL('../dist/viewer-check/three.mjs', import.meta.url);
-let installed = true; try { await access(vendor); } catch { installed = false; }
+let installed = true; try { await Promise.all([vendor,new URL('../dist/viewer-check/GLTFExporter.mjs',import.meta.url),new URL('../dist/viewer-check/TextureUtils.mjs',import.meta.url)].map(path=>access(path))); } catch { installed = false; }
 // Optional integration checks use the exact browser library, downloaded into ignored dist/ (see web/README.md).
 if (!installed) {
-  test('Three.js integration checks (download pinned module to dist/viewer-check/three.mjs)', { skip: true }, () => {});
+  test('Three.js integration checks (download pinned modules to dist/viewer-check/three.mjs)', { skip: true }, () => {});
 } else {
   const THREE = await import(vendor.href);
   const asModule = s => 'data:text/javascript;base64,' + Buffer.from(s).toString('base64');
@@ -20,24 +20,44 @@ if (!installed) {
     }
     export class PMREMGenerator {fromScene() {return {texture: new Texture()};} dispose() {}}
   `);
+  const utilsURL = asModule((await readFile(new URL('../dist/viewer-check/TextureUtils.mjs',import.meta.url),'utf8')).replace("'three'",JSON.stringify(vendor.href)));
+  const exporterURL = asModule((await readFile(new URL('../dist/viewer-check/GLTFExporter.mjs',import.meta.url),'utf8'))
+    .replace("'three'",JSON.stringify(vendor.href)).replace("'./../utils/TextureUtils.js'",JSON.stringify(utilsURL)));
+  globalThis.FileReader = class {
+    readAsArrayBuffer(blob) { blob.arrayBuffer().then(buffer=>{this.result=buffer;this.onloadend?.();}); }
+  };
+  const exporterAdapter = asModule(`import {GLTFExporter as Exporter} from ${JSON.stringify(exporterURL)};
+    export class GLTFExporter extends Exporter { async parseAsync(...args) {const bytes=await super.parseAsync(...args);globalThis.__balloonAsset=bytes;return bytes;} }`);
   const cache = new Map();
   async function load(name) {
     if (cache.has(name)) return cache.get(name);
     let s = await readFile(new URL('../web/js/' + name, import.meta.url), 'utf8');
     const matches = [...s.matchAll(/"\.\/([\w-]+\.js)"/g)];
     for (const m of matches) s = s.replace(m[0], JSON.stringify(await load(m[1])));
-    s = s.replace('"three"', JSON.stringify(adapter));
+    s = s.replace('"three"', JSON.stringify(adapter)).replace('"three/addons/exporters/GLTFExporter.js"',JSON.stringify(exporterAdapter));
     const url = asModule(s); cache.set(name,url); return url;
   }
   globalThis.location = {search: ''};
-  globalThis.window = {Cesium: {Cartesian3: THREE.Vector3}};
+  class Matrix extends Array {
+    constructor() {super(...new THREE.Matrix4().elements);}
+    static fromArray(values,offset=0,out=new Matrix()) {for(let i=0;i<16;i++)out[i]=values[offset+i];return out;}
+  }
+  Matrix.IDENTITY=new Matrix();
+  const models=[];
+  globalThis.window = {Cesium: {Cartesian3: THREE.Vector3,Matrix4:Matrix,Axis:{X:0,Z:2},Model:{async fromGltfAsync(options){
+    const bytes=globalThis.__balloonAsset, view=new DataView(bytes);
+    assert.equal(view.getUint32(0,true),0x46546c67);
+    const json=JSON.parse(new TextDecoder().decode(new Uint8Array(bytes,20,view.getUint32(12,true))).trim());
+    const nodes=new Map(json.nodes.map(n=>[n.name,{show:true,matrix:null}]));
+    const model={ready:true,options,nodes,getNode:name=>nodes.get(name)};models.push(model);return model;
+  }}}};
   globalThis.document = {createElement: () => ({width:1280,height:720,clientWidth:1280,style:{},getContext:()=>({clearRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){}})}), getElementById: () => ({appendChild(){}})};
   const {createOverlay} = await import(await load('overlay.js'));
   const earth = {viewer: {canvas: {clientWidth:1280,clientHeight:720}},
-    scene: {postRender: {addEventListener(){}}},
+    scene: {postRender: {addEventListener(){}}, primitives:{add(model){return model;}}},
     camera: {positionWC: new THREE.Vector3(4000,0,0), directionWC: new THREE.Vector3(-1,0,0),
       upWC: new THREE.Vector3(0,0,1), rightWC: new THREE.Vector3(0,1,0), frustum: {fovy:Math.PI/3}}};
-  const O = createOverlay(earth); O.anchor = new THREE.Vector3(); O.Rinv = new THREE.Matrix4(); O.sync();
+  const O = createOverlay(earth); O.anchor = new THREE.Vector3(); O.Rinv = new THREE.Matrix4(); O.enuMatrix=Matrix.IDENTITY; O.sync();
   test('copied globe camera survives renderer matrix updates and projects its target at screen centre', () => {
     const expected = O.camera.matrixWorld.clone();
     O.camera.updateMatrixWorld(true);
@@ -46,17 +66,22 @@ if (!installed) {
     assert.ok(Math.abs(p.x) < 1e-10 && Math.abs(p.y) < 1e-10);
     assert.ok(p.z > -1 && p.z < 1);
   });
-  const S = {overlay:O, cam:'chase', enu:new THREE.Vector3(0,0,1000), cur:{alt:1000},
+  const S = {earth, overlay:O, cam:'chase', enu:new THREE.Vector3(0,0,1000), cur:{alt:1000},
     data:{meta:{burst_time_s:2400,launch:{ground_m:0}}}, site:{lat:30,lon:-97}, quality:1,
     sun:{k:1,el:45,az:180}, t:100, playing:false, timeScale:6};
   const {createBalloon} = await import(await load('balloon.js'));
-  test('balloon stays anchored and keeps its world size when zoom changes', () => {
+  test('native balloon exports valid geometry and shares the globe frame without zoom scaling', async () => {
     const balloon = createBalloon(S); const root = O.occluders.children.at(-1);
-    balloon.update(S,0); const train = root.children[0];
+    await balloon.ready; balloon.update(S,0); const train = root.children[0];
     const scale = train.scale.clone(); const position = root.position.clone();
     O.camEnu.set(8000,0,1000); balloon.update(S,0);
     assert.deepEqual(train.scale,scale); assert.deepEqual(root.position,position);
     assert.equal(root.visible,true); assert.equal(train.scale.x,60);
+    const native=models.at(-1); assert.equal(native.options.upAxis,2); assert.equal(native.options.forwardAxis,0);
+    assert.equal(native.options.minimumPixelSize,0); assert.equal(native.options.enableVerticalExaggeration,false);
+    assert.equal(native.modelMatrix,O.enuMatrix); assert.equal(native.show,true);
+    assert.deepEqual(Array.from(native.nodes.get(root.name).matrix),root.matrix.elements);
+    root.traverse(o=>assert.equal(o.layers.mask,2)); // Only the cloud depth pass sees the Three duplicate.
   });
   const {createWind} = await import(await load('wind.js'));
   test('ribbons keep metre dimensions, stay horizontal and skip forecast sampling after zoom fade', () => {
@@ -116,28 +141,24 @@ if (!installed) {
     delete O.renderer.beforeRender;
   });
 
-  const {createRouteMask,clipRouteSegment}=await import(await load('route-mask.js'));
-  test('route masks keep nominal, selected and travelled paths readable and clear when hidden',()=>{
-    const original=document.createElement; let strokes=0, clears=0;
-    const ctx={clearRect(){clears++;},beginPath(){},moveTo(x,y){assert.ok(Number.isFinite(x)&&Number.isFinite(y));},
-      lineTo(x,y){assert.ok(Number.isFinite(x)&&Number.isFinite(y));},stroke(){strokes++;}};
-    document.createElement=()=>({width:2,height:2,getContext:()=>ctx});
-    const mask=createRouteMask(O); document.createElement=original;
-    const points=[new THREE.Vector3(0,-100,0),new THREE.Vector3(0,100,0)];
-    const f={vis:{hidden:false},selected:null,pathPrim:{show:true},selEnt:{show:true},trail:{show:true},
-      nom:points,selPositions:points,trailPositions:points};
-    mask.update(f,0,10,640,360); assert.equal(strokes,3); assert.equal(ctx.lineWidth,4);
-    mask.update(f,0,10,640,360); assert.equal(strokes,3); assert.equal(clears,1);
-    f.selected=1; mask.update(f,0,10,640,360); assert.equal(strokes,6);
-    f.vis.hidden=true; mask.update(f,0,10,640,360); assert.equal(strokes,6); assert.equal(clears,3);
-    mask.update(f,0,11,640,360); assert.equal(clears,3);
-  });
-  test('route projection clips near/side planes and rejects paths behind the camera',()=>{
-    assert.equal(clipRouteSegment([0,0,0,-1],[0.2,0,0,-1]),null);
-    const near=clipRouteSegment([0,0,-2,1],[0,0,0,1]);
-    assert.equal(near[0][2],-1); assert.equal(near[0][3],1);
-    const edge=clipRouteSegment([-3,0,0,1],[0,0,0,1]); assert.equal(edge[0][0],-1);
-    assert.equal(clipRouteSegment([-4,0,0,1],[-2,0,0,1]),null);
+
+  test('cloud route depth uses exact line widths, caches geometry and renders after balloon depth',()=>{
+    const f={vis:{hidden:false},selected:0,pathPrim:{show:true},selEnt:{show:true},trail:{show:true},
+      nom:[new THREE.Vector3(0,0,0),new THREE.Vector3(0,100,0)],
+      selPositions:[new THREE.Vector3(0,0,10),new THREE.Vector3(0,100,10)],
+      trailPositions:[new THREE.Vector3(0,0,10),new THREE.Vector3(0,50,10)]};
+    S.flight=f;S.t=10;S.follow=0;
+    assert.equal(O.routeDepth.update(S,640,360),true);
+    const geometry=O.routeDepth.group.children[0].geometry;
+    assert.equal(geometry.instanceCount,3);
+    assert.deepEqual(Array.from(geometry.attributes.aWidth.array.slice(0,3)),[3,3.5,4]);
+    assert.equal(O.routeDepth.update(S,640,360),false);
+    const draws=[];O.renderer.beforeRender=scene=>draws.push({override:scene.overrideMaterial,balloon:O.occluders.visible,routes:O.routeDepth.group.visible,autoClear:O.renderer.autoClear});
+    O.depth.render(640,360); delete O.renderer.beforeRender;
+    assert.equal(draws.length,2);assert.ok(draws[0].override);assert.equal(draws[0].routes,false);
+    assert.equal(draws[1].override,null);assert.equal(draws[1].balloon,false);assert.equal(draws[1].routes,true);assert.equal(draws[1].autoClear,false);
+    assert.equal(O.occluders.visible,true);
+    f.vis.hidden=true; O.routeDepth.update(S,640,360); assert.equal(geometry.instanceCount,0);
   });
 
 }

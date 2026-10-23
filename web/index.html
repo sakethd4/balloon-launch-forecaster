@@ -69,7 +69,7 @@
       <label class="sw"><input type="checkbox" id="lyBirds" checked><i></i>Birds</label>
       <label class="sw"><input type="checkbox" id="lyDots" checked><i></i>Other possible flights</label>
       <label class="sw"><input type="checkbox" id="lyRings" checked><i></i>Landing zone rings</label>
-      <label class="slider">Terrain height <input type="range" id="exag" min="1" max="3.5" step="0.1" value="1.8"><output id="exagOut">1.8x</output></label>
+      <label class="slider">Terrain height <input type="range" id="exag" min="1" max="3.5" step="0.1" value="1"><output id="exagOut">1.0x</output></label>
     </div>
   </section>
 </aside>
@@ -99,9 +99,15 @@
 </aside>
 
 <div id="legend">
+  <div id="windLegend">
   <div class="bar" id="legendBar"></div>
   <div class="ticks"><span>-60</span><span>-30</span><span>0</span><span>20</span><span>40 &deg;C</span></div>
-  <p>Wind colour = air temperature. Brighter, longer streaks = faster wind.</p>
+  <p>Air temperature (&deg;C) &middot; longer ribbons = faster wind</p>
+  </div>
+  <p class="route-key"><span class="key-line forecast"></span>Forecast <span class="key-line selected"></span>Selected</p>
+  <p>Landing spread: 50% solid &middot; 90% dashed</p>
+  <p class="source-note" id="weatherStamp"></p>
+  <p class="source-note">Clouds are illustrative; covered routes fade. Balloon &times;60.</p>
 </div>
 
 <div id="hud" hidden>

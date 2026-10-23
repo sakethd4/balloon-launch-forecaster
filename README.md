@@ -41,5 +41,3 @@ To serve other devices on the same network, add `--host 0.0.0.0` and open `http:
 - Improve real-flight calibration and model errors that vary across space and time.
 - Add terrain-aware touchdown and uncertainty in balloon ascent, burst altitude, and descent.
 - Simplify data setup and add automatic forecast updates and shareable hosting.
-
-*Research prototype; advisory only, not a go/no-go decision system.*
